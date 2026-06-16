@@ -1,0 +1,1 @@
+Ready for your preferred tech stack (Flutter/Tauri/Next.js).
