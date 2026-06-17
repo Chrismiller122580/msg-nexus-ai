@@ -1,0 +1,77 @@
+import { pgTable, serial, text, timestamp, jsonb, boolean, numeric, integer, uniqueIndex } from 'drizzle-orm/pg-core';
+
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  name: text('name'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const connectedAccounts = pgTable('connected_accounts', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  platformId: text('platform_id').notNull(),
+  identifier: text('identifier').notNull(), // e.g. "john@gmail.com", "+15551234567", "work-account"
+  label: text('label'), // optional friendly name
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueUserPlatformIdentifier: uniqueIndex('unique_user_platform_identifier').on(table.userId, table.platformId, table.identifier),
+}));
+
+export const messages = pgTable('messages', {
+  id: text('id').primaryKey(), // we keep the generated client ids for now
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  platformId: text('platform_id').notNull(),
+  timestamp: text('timestamp').notNull(),
+  from: text('from').notNull(),
+  body: text('body').notNull(),
+  subject: text('subject'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const magicLinks = pgTable('magic_links', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull(),
+  token: text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const gmailConnections = pgTable('gmail_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  email: text('email').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const comments = pgTable('comments', {
+  id: serial('id').primaryKey(),
+  comment: text('comment').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const insights = pgTable('insights', {
+  id: serial('id').primaryKey(),
+  messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }).unique(),
+  category: text('category').notNull(),
+  amount: numeric('amount'),
+  currency: text('currency'),
+  vendor: text('vendor'),
+  dueDate: text('due_date'),
+  isRecurring: boolean('is_recurring'),
+  confidence: numeric('confidence'),
+  summary: text('summary'),
+  entities: jsonb('entities'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type ConnectedAccount = typeof connectedAccounts.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type Insight = typeof insights.$inferSelect;
