@@ -5,6 +5,26 @@
 - npm (or pnpm/yarn)
 - Neon Postgres `DATABASE_URL` (for full functionality)
 
+## GitHub Codespaces
+
+After creating a new Codespace (or after a codespace move due to domain name change):
+
+1. Run `npm install` — this ensures platform-specific native dependencies (e.g. Tailwind) match the new environment.
+2. `cp .env.example .env.local`
+3. Edit `.env.local` and set your `DATABASE_URL` (sign up for free at neon.tech if needed).
+4. `npm run db:push`
+5. `npm run dev`
+
+The app **automatically detects** the correct public Codespaces URL (`https://<name>-<port>.app.github.dev`) for:
+- Magic link sign-in URLs
+- Gmail OAuth redirect/callback URLs
+
+No need to set `NEXT_PUBLIC_APP_URL` manually in Codespaces.
+
+Open the forwarded port URL from the **Ports** panel (or the browser preview). 
+
+**Note:** The demo account and magic links (shown on screen in dev) work once the DB is connected.
+
 ## Run the app (Phase 1)
 
 ```bash

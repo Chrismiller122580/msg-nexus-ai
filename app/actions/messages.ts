@@ -36,7 +36,7 @@ export async function getUserMessages(): Promise<{ messages: Message[]; insights
     .where(eq(messagesTable.userId, user.id))
     .orderBy(desc(messagesTable.timestamp));
 
-  const messageIds = userMessages.map((m) => m.id);
+  const messageIds = userMessages.map((m: { id: string }) => m.id);
 
   let userInsights: DbInsightRow[] = [];
   if (messageIds.length > 0) {

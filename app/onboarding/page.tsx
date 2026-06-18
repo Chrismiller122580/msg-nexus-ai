@@ -42,7 +42,7 @@ export default function OnboardingPage() {
         const existing = await getConnectedAccounts();
         if (existing.length > 0) {
           setAccounts(
-            existing.map(({ platformId, identifier, label }) => ({
+            existing.map(({ platformId, identifier, label }: any) => ({
               platformId,
               identifier,
               label,

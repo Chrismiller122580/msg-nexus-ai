@@ -68,7 +68,7 @@ export default function InboxClient() {
         setConnectedAccounts(cas);
         setGmailStatus(gmail);
 
-        const platformIds = [...new Set(cas.map((a) => a.platformId))];
+        const platformIds = [...new Set(cas.map((a: { platformId: string }) => a.platformId))];
         const platforms =
           platformIds.length > 0
             ? PLATFORMS.filter((p) => platformIds.includes(p.id))
