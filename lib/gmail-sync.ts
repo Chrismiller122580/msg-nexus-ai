@@ -1,31 +1,10 @@
-import { getDb, gmailConnections, messages as messagesTable, connectedAccounts } from '@/db';
-import { eq, and } from 'drizzle-orm';
+import { getDb, gmailConnections } from '@/db';
+import { eq } from 'drizzle-orm';
 import { fetchRecentGmailMessages, getValidAccessToken } from '@/lib/gmail';
-import { parseMessage } from '@/lib/ai-parser';
-import { saveInsight } from '@/app/actions/messages';
+import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 
 export async function ensureEmailConnectedAccount(userId: number, email: string) {
-  const db = getDb();
-  const [existing] = await db
-    .select({ id: connectedAccounts.id })
-    .from(connectedAccounts)
-    .where(
-      and(
-        eq(connectedAccounts.userId, userId),
-        eq(connectedAccounts.platformId, 'email'),
-        eq(connectedAccounts.identifier, email)
-      )
-    )
-    .limit(1);
-
-  if (existing) return;
-
-  await db.insert(connectedAccounts).values({
-    userId,
-    platformId: 'email',
-    identifier: email,
-    label: 'Gmail',
-  });
+  await ensureConnectedAccount(userId, 'email', email, 'Gmail');
 }
 
 export async function syncGmailForUser(
@@ -39,7 +18,6 @@ export async function syncGmailForUser(
 
   const gmailMessages = await fetchRecentGmailMessages(accessToken, limit);
   const db = getDb();
-  let imported = 0;
 
   const [conn] = await db
     .select({ email: gmailConnections.email })
@@ -51,31 +29,18 @@ export async function syncGmailForUser(
     await ensureEmailConnectedAccount(userId, conn.email);
   }
 
-  for (const gm of gmailMessages) {
-    const externalKey = `gmail-${gm.externalId}`;
-    const [existing] = await db
-      .select({ id: messagesTable.id })
-      .from(messagesTable)
-      .where(and(eq(messagesTable.userId, userId), eq(messagesTable.id, externalKey)))
-      .limit(1);
-
-    if (existing) continue;
-
-    await db.insert(messagesTable).values({
-      id: externalKey,
-      userId,
-      platformId: 'email',
-      timestamp: gm.timestamp,
-      from: gm.from,
-      body: gm.body,
-      subject: gm.subject,
-    });
-
-    const ins = parseMessage(gm.body, gm.from);
-    ins.messageId = externalKey;
-    await saveInsight(ins);
-    imported++;
-  }
+  const imported = await ingestMessages(
+    userId,
+    gmailMessages.map((m) => ({
+      externalId: m.externalId,
+      platformId: 'email' as const,
+      from: m.from,
+      body: m.body,
+      subject: m.subject,
+      timestamp: m.timestamp,
+    })),
+    'gmail'
+  );
 
   await db
     .update(gmailConnections)

@@ -1,9 +1,9 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getDb, gmailConnections } from '@/db';
+import { getDb, outlookConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
-import { exchangeGmailCode, getGmailProfile } from '@/lib/gmail';
-import { ensureEmailConnectedAccount, syncGmailForUser } from '@/lib/gmail-sync';
+import { exchangeMicrosoftCode, getMicrosoftProfile } from '@/lib/microsoft';
+import { syncOutlookForUser } from '@/lib/microsoft-sync';
 import { eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
@@ -16,53 +16,52 @@ export async function GET(request: Request) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const cookieStore = await cookies();
-  const savedState = cookieStore.get('gmail-oauth-state')?.value;
+  const savedState = cookieStore.get('microsoft-oauth-state')?.value;
 
-  cookieStore.delete('gmail-oauth-state');
+  cookieStore.delete('microsoft-oauth-state');
 
   if (!code || !state || !savedState || state !== savedState) {
-    redirect('/settings?error=gmail-auth-failed');
+    redirect('/settings?error=outlook-auth-failed');
   }
 
   let success = false;
   try {
-    const tokens = await exchangeGmailCode(code);
-    const profile = await getGmailProfile(tokens.access_token);
+    const tokens = await exchangeMicrosoftCode(code);
+    const profile = await getMicrosoftProfile(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();
 
     const existing = await db
       .select()
-      .from(gmailConnections)
-      .where(eq(gmailConnections.userId, user.id))
+      .from(outlookConnections)
+      .where(eq(outlookConnections.userId, user.id))
       .limit(1);
 
     if (existing.length > 0) {
       await db
-        .update(gmailConnections)
+        .update(outlookConnections)
         .set({
-          email: profile.emailAddress,
+          email: profile.email,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? existing[0].refreshToken,
           expiresAt,
         })
-        .where(eq(gmailConnections.userId, user.id));
+        .where(eq(outlookConnections.userId, user.id));
     } else {
-      await db.insert(gmailConnections).values({
+      await db.insert(outlookConnections).values({
         userId: user.id,
-        email: profile.emailAddress,
+        email: profile.email,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt,
       });
     }
 
-    await ensureEmailConnectedAccount(user.id, profile.emailAddress);
-    await syncGmailForUser(user.id);
+    await syncOutlookForUser(user.id);
     success = true;
   } catch (err) {
-    console.error('Gmail callback error:', err);
+    console.error('Microsoft callback error:', err);
   }
 
-  redirect(success ? '/settings?gmail=connected' : '/settings?error=gmail-auth-failed');
+  redirect(success ? '/settings?outlook=connected' : '/settings?error=outlook-auth-failed');
 }

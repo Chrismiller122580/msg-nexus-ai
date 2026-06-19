@@ -49,6 +49,25 @@ export const gmailConnections = pgTable('gmail_connections', {
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
 });
 
+export const outlookConnections = pgTable('outlook_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  email: text('email').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const twilioConnections = pgTable('twilio_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  phoneNumber: text('phone_number').notNull(),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
 export const comments = pgTable('comments', {
   id: serial('id').primaryKey(),
   comment: text('comment').notNull(),
