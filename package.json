@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push --force",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "vercel-build": "npm run db:push && npm run build"
+    "vercel-build": "node scripts/vercel-prebuild.mjs && npm run db:push && npm run build"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
