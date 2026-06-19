@@ -68,6 +68,61 @@ export const twilioConnections = pgTable('twilio_connections', {
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
 });
 
+export const slackConnections = pgTable('slack_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  teamId: text('team_id'),
+  teamName: text('team_name'),
+  userName: text('user_name').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const discordConnections = pgTable('discord_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  discordUserId: text('discord_user_id').notNull(),
+  userName: text('user_name').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const telegramConnections = pgTable('telegram_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  chatId: text('chat_id'),
+  userName: text('user_name'),
+  linkCode: text('link_code'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const whatsappConnections = pgTable('whatsapp_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  phoneNumber: text('phone_number').notNull(),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
+export const xConnections = pgTable('x_connections', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  xUserId: text('x_user_id').notNull(),
+  userName: text('user_name').notNull(),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token'),
+  expiresAt: timestamp('expires_at'),
+  lastSyncedAt: timestamp('last_synced_at'),
+  connectedAt: timestamp('connected_at').defaultNow().notNull(),
+});
+
 export const comments = pgTable('comments', {
   id: serial('id').primaryKey(),
   comment: text('comment').notNull(),

@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getDb, gmailConnections, outlookConnections, twilioConnections } from '@/db';
+import {
+  getDb,
+  gmailConnections,
+  outlookConnections,
+  twilioConnections,
+  slackConnections,
+  discordConnections,
+  telegramConnections,
+  whatsappConnections,
+  xConnections,
+} from '@/db';
 import { syncAllConnectors } from '@/lib/connectors/sync-all';
 
 export async function GET(request: Request) {
@@ -13,14 +23,19 @@ export async function GET(request: Request) {
   const db = getDb();
   const userIds = new Set<number>();
 
-  const [gmail, outlook, twilio] = await Promise.all([
+  const tables = await Promise.all([
     db.select({ userId: gmailConnections.userId }).from(gmailConnections),
     db.select({ userId: outlookConnections.userId }).from(outlookConnections),
     db.select({ userId: twilioConnections.userId }).from(twilioConnections),
+    db.select({ userId: slackConnections.userId }).from(slackConnections),
+    db.select({ userId: discordConnections.userId }).from(discordConnections),
+    db.select({ userId: telegramConnections.userId }).from(telegramConnections),
+    db.select({ userId: whatsappConnections.userId }).from(whatsappConnections),
+    db.select({ userId: xConnections.userId }).from(xConnections),
   ]);
 
-  for (const row of [...gmail, ...outlook, ...twilio]) {
-    userIds.add(row.userId);
+  for (const rows of tables) {
+    for (const row of rows) userIds.add(row.userId);
   }
 
   let totalImported = 0;
@@ -32,10 +47,5 @@ export async function GET(request: Request) {
     results.push({ userId, imported: sync.totalImported });
   }
 
-  return NextResponse.json({
-    ok: true,
-    usersSynced: userIds.size,
-    totalImported,
-    results,
-  });
+  return NextResponse.json({ ok: true, usersSynced: userIds.size, totalImported, results });
 }

@@ -8,11 +8,7 @@ export async function syncAllIntegrationsAction(): Promise<{
   success?: boolean;
   error?: string;
   totalImported?: number;
-  details?: {
-    gmail: { imported: number; error?: string };
-    outlook: { imported: number; error?: string };
-    twilio: { imported: number; error?: string };
-  };
+  details?: Record<string, { imported: number; error?: string }>;
 }> {
   try {
     const user = await requireUser();
@@ -28,6 +24,11 @@ export async function syncAllIntegrationsAction(): Promise<{
         gmail: result.gmail,
         outlook: result.outlook,
         twilio: result.twilio,
+        slack: result.slack,
+        discord: result.discord,
+        telegram: result.telegram,
+        whatsapp: result.whatsapp,
+        x: result.x,
       },
     };
   } catch (err: unknown) {

@@ -60,7 +60,7 @@ export async function getConnectedAccounts() {
     .from(connectedAccounts)
     .where(eq(connectedAccounts.userId, user.id));
 
-  return rows.map((r: any) => ({
+  return rows.map((r: (typeof rows)[number]) => ({
     id: r.id,
     platformId: r.platformId as PlatformId,
     identifier: r.identifier,
