@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft, Mail, RefreshCw, Unplug, Loader2, Smartphone,
-  Hash, MessageCircle, Send, AtSign,
+  Hash, MessageCircle, Send, AtSign, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
@@ -34,6 +34,7 @@ export default function SettingsClient() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [userEmail, setUserEmail] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const [smsPhone, setSmsPhone] = useState('');
   const [waPhone, setWaPhone] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
@@ -67,6 +68,7 @@ export default function SettingsClient() {
         const user = await getCurrentUserAction();
         if (!user) { router.replace('/login?redirect=/settings'); return; }
         setUserEmail(user.email);
+        setIsAdmin(user.isAdmin);
         await reload();
       } catch {
         router.replace('/login?redirect=/settings');
@@ -121,7 +123,14 @@ export default function SettingsClient() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 h-16 flex items-center justify-between max-w-3xl mx-auto w-full">
         <MsgNexusLogo href="/inbox" />
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link href="/admin" className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent">
+              <Shield size={15} /> Admin
+            </Link>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-6 py-10">

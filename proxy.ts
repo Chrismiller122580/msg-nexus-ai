@@ -15,7 +15,12 @@ export function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith('/inbox') || pathname.startsWith('/onboarding') || pathname.startsWith('/settings')) {
+  if (
+    pathname.startsWith('/inbox') ||
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/admin')
+  ) {
     const session = request.cookies.get(SESSION_COOKIE)?.value;
     if (!session) {
       const loginUrl = new URL('/login', request.url);
@@ -28,5 +33,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/inbox/:path*', '/onboarding/:path*', '/settings/:path*'],
+  matcher: ['/inbox/:path*', '/onboarding/:path*', '/settings/:path*', '/admin/:path*'],
 };

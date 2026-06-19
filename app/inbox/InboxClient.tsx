@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Plus, RefreshCw, Download, Upload, Trash2, X, Play, BarChart3,
-  Inbox, Calendar, DollarSign, Users, Filter, LogOut, Settings, Mail, Loader2
+  Inbox, Calendar, DollarSign, Users, Filter, LogOut, Settings, Mail, Loader2, Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -41,7 +41,7 @@ export default function InboxClient() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [authState, setAuthState] = useState<'loading' | 'ready'>('loading');
   const [dataState, setDataState] = useState<'idle' | 'loading' | 'ready'>('idle');
-  const [user, setUser] = useState<{ email: string; name?: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; name?: string; isAdmin?: boolean } | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<Array<{id: number; platformId: PlatformId; identifier: string; label?: string}>>([]);
   const [gmailStatus, setGmailStatus] = useState<{
     configured: boolean;
@@ -504,6 +504,16 @@ export default function InboxClient() {
             >
               <Settings size={15} /> Settings
             </Link>
+
+            {user.isAdmin && (
+              <Link
+                href="/admin"
+                className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent"
+                title="Admin portal"
+              >
+                <Shield size={15} /> Admin
+              </Link>
+            )}
 
             <button onClick={handleLogout} className="btn btn-ghost text-xs flex items-center gap-1.5" title="Log out">
               <LogOut size={15} /> Logout

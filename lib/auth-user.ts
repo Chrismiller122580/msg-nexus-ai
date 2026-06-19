@@ -1,6 +1,7 @@
-import { getDb, users, connectedAccounts, gmailConnections } from '@/db';
+import { getDb, users, connectedAccounts, gmailConnections, subscriptions } from '@/db';
 import { eq } from 'drizzle-orm';
 import { createSession } from '@/lib/session';
+import { ensureAdminRole } from '@/lib/admin';
 
 export async function findOrCreateUser(email: string) {
   const normalizedEmail = email.toLowerCase().trim();
@@ -24,7 +25,24 @@ export async function findOrCreateUser(email: string) {
     user = newUser;
   }
 
-  return user;
+  const [existingSub] = await db
+    .select({ id: subscriptions.id })
+    .from(subscriptions)
+    .where(eq(subscriptions.userId, user.id))
+    .limit(1);
+
+  if (!existingSub) {
+    await db.insert(subscriptions).values({
+      userId: user.id,
+      plan: 'free',
+      status: 'active',
+    });
+  }
+
+  await ensureAdminRole(user.id, user.email);
+
+  const [refreshed] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+  return refreshed ?? user;
 }
 
 export async function loginUser(email: string) {
