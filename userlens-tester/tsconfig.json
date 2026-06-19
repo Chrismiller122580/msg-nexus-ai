@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "userlens-tester"]
+  "exclude": ["node_modules"]
 }

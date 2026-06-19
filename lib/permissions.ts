@@ -16,7 +16,9 @@ export type Permission =
   | 'api_keys.write'
   | 'webhooks.read'
   | 'webhooks.write'
-  | 'billing.manage';
+  | 'billing.manage'
+  | 'userlens.read'
+  | 'userlens.write';
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   user: [],
@@ -28,6 +30,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'connections.write',
     'audit.read',
     'analytics.read',
+    'userlens.read',
   ],
   billing: [
     'dashboard.view',
@@ -54,6 +57,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     'webhooks.read',
     'webhooks.write',
     'billing.manage',
+    'userlens.read',
+    'userlens.write',
   ],
 };
 
@@ -84,4 +89,5 @@ export const ADMIN_NAV: Array<{ href: string; label: string; permission: Permiss
   { href: '/admin/analytics', label: 'Analytics', permission: 'analytics.read' },
   { href: '/admin/api', label: 'API keys', permission: 'api_keys.read' },
   { href: '/admin/webhooks', label: 'Webhooks', permission: 'webhooks.read' },
+  { href: '/admin/userlens', label: 'UserLens', permission: 'userlens.read' },
 ];

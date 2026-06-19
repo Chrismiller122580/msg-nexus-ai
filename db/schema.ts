@@ -35,6 +35,26 @@ export const webhooks = pgTable('webhooks', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const userlensRuns = pgTable('userlens_runs', {
+  id: serial('id').primaryKey(),
+  externalId: text('external_id'),
+  url: text('url').notNull(),
+  tests: jsonb('tests').$type<string[]>().default([]),
+  status: text('status').notNull().default('pending'),
+  triggeredByUserId: integer('triggered_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  smokeOk: boolean('smoke_ok'),
+  a11yViolations: integer('a11y_violations'),
+  lighthousePerformance: integer('lighthouse_performance'),
+  lighthouseAccessibility: integer('lighthouse_accessibility'),
+  lighthouseSeo: integer('lighthouse_seo'),
+  lighthouseBestPractices: integer('lighthouse_best_practices'),
+  durationMs: integer('duration_ms'),
+  results: jsonb('results'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+});
+
 export const webhookDeliveries = pgTable('webhook_deliveries', {
   id: serial('id').primaryKey(),
   webhookId: integer('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),

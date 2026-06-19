@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, CreditCard, Plug, ScrollText,
-  BarChart3, Key, Inbox, Settings, Shield, Webhook,
+  BarChart3, Key, Inbox, Settings, Shield, Webhook, ScanEye,
 } from 'lucide-react';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
 import { ThemeToggle } from '@/app/components/ThemeToggle';
@@ -20,6 +20,7 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   '/admin/analytics': BarChart3,
   '/admin/api': Key,
   '/admin/webhooks': Webhook,
+  '/admin/userlens': ScanEye,
 };
 
 export function AdminShell({
