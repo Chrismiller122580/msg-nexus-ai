@@ -1,13 +1,14 @@
 'use server';
 
 import { getDb, users, subscriptions, messages, connectedAccounts } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
+import type { Role } from '@/lib/permissions';
 import { logAudit } from '@/lib/audit';
 import { eq, desc, count, like, or } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 export async function listAdminUsers(search?: string) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission('users.read');
   const db = getDb();
 
   const rows = search
@@ -52,12 +53,17 @@ export async function listAdminUsers(search?: string) {
 
 export async function updateUserAdminAction(
   userId: number,
-  updates: { role?: 'user' | 'admin'; status?: 'active' | 'suspended'; name?: string }
+  updates: { role?: Role; status?: 'active' | 'suspended'; name?: string }
 ) {
-  const admin = await requireAdmin();
-  if (userId === admin.id && updates.role === 'user') {
-    return { error: 'Cannot demote yourself' };
+  const admin = await requirePermission('users.write');
+
+  if (updates.role !== undefined) {
+    await requirePermission('users.roles');
+    if (userId === admin.id && updates.role !== 'admin') {
+      return { error: 'Cannot change your own role' };
+    }
   }
+
   if (userId === admin.id && updates.status === 'suspended') {
     return { error: 'Cannot suspend yourself' };
   }
@@ -65,11 +71,11 @@ export async function updateUserAdminAction(
   const db = getDb();
   await db.update(users).set(updates).where(eq(users.id, userId));
 
-  const action = updates.status === 'suspended' ? 'user.suspend'
-    : updates.status === 'active' ? 'user.activate'
-    : updates.role === 'admin' ? 'user.promote_admin'
-    : updates.role === 'user' ? 'user.demote_admin'
-    : 'user.update';
+  let action = 'user.update';
+  if (updates.status === 'suspended') action = 'user.suspend';
+  else if (updates.status === 'active') action = 'user.activate';
+  else if (updates.role === 'admin') action = 'user.promote_admin';
+  else if (updates.role) action = 'user.role_change';
 
   await logAudit({
     actorUserId: admin.id,

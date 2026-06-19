@@ -6,6 +6,7 @@ import { eq, inArray, desc, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { Message, Insight, Category } from '@/lib/types';
 import { generateId } from '@/lib/utils';
+import { dispatchWebhookEvent } from '@/lib/webhooks';
 
 type DbInsightRow = typeof insightsTable.$inferSelect;
 
@@ -71,6 +72,13 @@ export async function saveMessage(message: Omit<Message, 'id'> & { id?: string }
     from: message.from,
     body: message.body,
     subject: message.subject,
+  });
+
+  void dispatchWebhookEvent('message.created', {
+    userId: user.id,
+    messageId: id,
+    platformId: message.platformId,
+    from: message.from,
   });
 
   revalidatePath('/inbox');

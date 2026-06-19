@@ -1,14 +1,14 @@
 'use server';
 
 import { getDb, apiKeys, users } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
 import { generateApiKey } from '@/lib/api-keys';
 import { logAudit } from '@/lib/audit';
 import { eq, desc, isNull, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 export async function listAdminApiKeys() {
-  await requireAdmin();
+  await requirePermission('api_keys.read');
   const db = getDb();
 
   const rows = await db
@@ -50,7 +50,7 @@ export async function createApiKeyAdminAction(params: {
   scopes?: string[];
   expiresInDays?: number;
 }): Promise<{ success?: boolean; error?: string; rawKey?: string; prefix?: string }> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission('api_keys.write');
   if (!params.name.trim()) return { error: 'Name is required' };
 
   const { raw, prefix, hash } = generateApiKey();
@@ -82,7 +82,7 @@ export async function createApiKeyAdminAction(params: {
 }
 
 export async function revokeApiKeyAdminAction(keyId: number) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission('api_keys.write');
   const db = getDb();
 
   await db.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, keyId));
@@ -100,7 +100,7 @@ export async function revokeApiKeyAdminAction(keyId: number) {
 }
 
 export async function listUsersForApiKeySelect() {
-  await requireAdmin();
+  await requirePermission('api_keys.read');
   const db = getDb();
   return db.select({ id: users.id, email: users.email }).from(users).limit(200);
 }

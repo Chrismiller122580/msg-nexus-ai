@@ -1,11 +1,11 @@
 'use server';
 
 import { getDb, auditLogs } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
 import { desc, like, or, eq } from 'drizzle-orm';
 
 export async function listAuditLogs(params?: { search?: string; action?: string; limit?: number }) {
-  await requireAdmin();
+  await requirePermission('audit.read');
   const db = getDb();
   const limit = params?.limit ?? 100;
 

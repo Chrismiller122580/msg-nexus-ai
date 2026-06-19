@@ -1,11 +1,11 @@
 'use server';
 
 import { getDb, users, messages, insights, auditLogs } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
 import { sql, gte, count, desc } from 'drizzle-orm';
 
 export async function getAdminAnalytics() {
-  await requireAdmin();
+  await requirePermission('analytics.read');
   const db = getDb();
 
   const days = 14;

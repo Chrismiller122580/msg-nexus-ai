@@ -41,7 +41,7 @@ export default function InboxClient() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [authState, setAuthState] = useState<'loading' | 'ready'>('loading');
   const [dataState, setDataState] = useState<'idle' | 'loading' | 'ready'>('idle');
-  const [user, setUser] = useState<{ email: string; name?: string; isAdmin?: boolean } | null>(null);
+  const [user, setUser] = useState<{ email: string; name?: string; isStaff?: boolean } | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<Array<{id: number; platformId: PlatformId; identifier: string; label?: string}>>([]);
   const [gmailStatus, setGmailStatus] = useState<{
     configured: boolean;
@@ -505,7 +505,7 @@ export default function InboxClient() {
               <Settings size={15} /> Settings
             </Link>
 
-            {user.isAdmin && (
+            {user.isStaff && (
               <Link
                 href="/admin"
                 className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent"

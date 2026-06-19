@@ -1,7 +1,7 @@
 'use server';
 
 import { getDb, users, messages, subscriptions, auditLogs, connectedAccounts, apiKeys } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
 import { sql, eq, gte, desc, count } from 'drizzle-orm';
 import {
   gmailConnections, outlookConnections, twilioConnections,
@@ -10,7 +10,7 @@ import {
 } from '@/db/schema';
 
 export async function getAdminDashboardStats() {
-  await requireAdmin();
+  await requirePermission('dashboard.view');
   const db = getDb();
 
   const now = new Date();

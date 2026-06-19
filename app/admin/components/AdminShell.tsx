@@ -4,24 +4,37 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Users, CreditCard, Plug, ScrollText,
-  BarChart3, Key, Inbox, Settings, Shield,
+  BarChart3, Key, Inbox, Settings, Shield, Webhook,
 } from 'lucide-react';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
 import { ThemeToggle } from '@/app/components/ThemeToggle';
 import { cn } from '@/lib/utils';
+import { ADMIN_NAV, type Permission } from '@/lib/permissions';
 
-const NAV = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
-  { href: '/admin/connections', label: 'Connections', icon: Plug },
-  { href: '/admin/audit', label: 'Audit log', icon: ScrollText },
-  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/admin/api', label: 'API keys', icon: Key },
-];
+const ICONS: Record<string, typeof LayoutDashboard> = {
+  '/admin': LayoutDashboard,
+  '/admin/users': Users,
+  '/admin/subscriptions': CreditCard,
+  '/admin/connections': Plug,
+  '/admin/audit': ScrollText,
+  '/admin/analytics': BarChart3,
+  '/admin/api': Key,
+  '/admin/webhooks': Webhook,
+};
 
-export function AdminShell({ children, adminEmail }: { children: React.ReactNode; adminEmail: string }) {
+export function AdminShell({
+  children,
+  adminEmail,
+  role,
+  permissions,
+}: {
+  children: React.ReactNode;
+  adminEmail: string;
+  role: string;
+  permissions: Permission[];
+}) {
   const pathname = usePathname();
+  const nav = ADMIN_NAV.filter((item) => permissions.includes(item.permission));
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -32,9 +45,11 @@ export function AdminShell({ children, adminEmail }: { children: React.ReactNode
             <span className="font-semibold text-sm">Admin Portal</span>
           </div>
           <p className="text-xs text-muted-foreground truncate">{adminEmail}</p>
+          <p className="text-xs text-accent/80 capitalize mt-0.5">{role}</p>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {nav.map(({ href, label }) => {
+            const Icon = ICONS[href] || LayoutDashboard;
             const active = href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
             return (
               <Link

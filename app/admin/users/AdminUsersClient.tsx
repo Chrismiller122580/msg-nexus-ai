@@ -1,14 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Shield, Ban, CheckCircle } from 'lucide-react';
+import { Search, Ban, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { listAdminUsers, updateUserAdminAction } from '@/app/actions/admin/users';
 import { updateSubscriptionAdminAction } from '@/app/actions/admin/subscriptions';
+import type { Permission } from '@/lib/permissions';
 
 type UserRow = Awaited<ReturnType<typeof listAdminUsers>>[number];
 
-export function AdminUsersClient({ initialUsers }: { initialUsers: UserRow[] }) {
+const ROLES = ['user', 'support', 'billing', 'admin'] as const;
+
+export function AdminUsersClient({
+  initialUsers,
+  permissions,
+}: {
+  initialUsers: UserRow[];
+  permissions: Permission[];
+}) {
+  const canWrite = permissions.includes('users.write');
+  const canEditRoles = permissions.includes('users.roles');
+  const canEditPlans = permissions.includes('subscriptions.write');
   const [users, setUsers] = useState(initialUsers);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,20 +90,34 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: UserRow[] }) 
                   <div className="text-xs text-muted-foreground">{u.name || '—'}</div>
                 </td>
                 <td className="p-3">
-                  <select
-                    value={u.plan}
-                    onChange={(e) => changePlan(u.id, e.target.value as 'free' | 'pro' | 'enterprise')}
-                    className="text-xs rounded-lg border border-border bg-background px-2 py-1"
-                  >
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                    <option value="enterprise">Enterprise</option>
-                  </select>
+                  {canEditPlans ? (
+                    <select
+                      value={u.plan}
+                      onChange={(e) => changePlan(u.id, e.target.value as 'free' | 'pro' | 'enterprise')}
+                      className="text-xs rounded-lg border border-border bg-background px-2 py-1"
+                    >
+                      <option value="free">Free</option>
+                      <option value="pro">Pro</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
+                  ) : (
+                    <span className="text-xs">{u.plan}</span>
+                  )}
                 </td>
                 <td className="p-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-accent/15 text-accent' : 'bg-muted'}`}>
-                    {u.role}
-                  </span>
+                  {canEditRoles ? (
+                    <select
+                      value={u.role}
+                      onChange={(e) => update(u.id, { role: e.target.value as typeof ROLES[number] })}
+                      className="text-xs rounded-lg border border-border bg-background px-2 py-1"
+                    >
+                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-accent/15 text-accent' : 'bg-muted'}`}>
+                      {u.role}
+                    </span>
+                  )}
                 </td>
                 <td className="p-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${u.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'}`}>
@@ -101,26 +127,19 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: UserRow[] }) 
                 <td className="p-3">{u.messageCount}</td>
                 <td className="p-3 text-muted-foreground text-xs">{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td className="p-3">
-                  <div className="flex gap-1">
-                    {u.role !== 'admin' ? (
-                      <button title="Make admin" onClick={() => update(u.id, { role: 'admin' })} className="p-1.5 rounded-lg hover:bg-muted">
-                        <Shield size={14} />
-                      </button>
-                    ) : (
-                      <button title="Remove admin" onClick={() => update(u.id, { role: 'user' })} className="p-1.5 rounded-lg hover:bg-muted">
-                        <Shield size={14} className="opacity-40" />
-                      </button>
-                    )}
-                    {u.status === 'active' ? (
-                      <button title="Suspend" onClick={() => update(u.id, { status: 'suspended' })} className="p-1.5 rounded-lg hover:bg-muted text-rose-500">
-                        <Ban size={14} />
-                      </button>
-                    ) : (
-                      <button title="Activate" onClick={() => update(u.id, { status: 'active' })} className="p-1.5 rounded-lg hover:bg-muted text-emerald-500">
-                        <CheckCircle size={14} />
-                      </button>
-                    )}
-                  </div>
+                  {canWrite && (
+                    <div className="flex gap-1">
+                      {u.status === 'active' ? (
+                        <button title="Suspend" onClick={() => update(u.id, { status: 'suspended' })} className="p-1.5 rounded-lg hover:bg-muted text-rose-500">
+                          <Ban size={14} />
+                        </button>
+                      ) : (
+                        <button title="Activate" onClick={() => update(u.id, { status: 'active' })} className="p-1.5 rounded-lg hover:bg-muted text-emerald-500">
+                          <CheckCircle size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

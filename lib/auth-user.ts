@@ -2,6 +2,7 @@ import { getDb, users, connectedAccounts, gmailConnections, subscriptions } from
 import { eq } from 'drizzle-orm';
 import { createSession } from '@/lib/session';
 import { ensureAdminRole } from '@/lib/admin';
+import { dispatchWebhookEvent } from '@/lib/webhooks';
 
 export async function findOrCreateUser(email: string) {
   const normalizedEmail = email.toLowerCase().trim();
@@ -13,7 +14,9 @@ export async function findOrCreateUser(email: string) {
     .where(eq(users.email, normalizedEmail))
     .limit(1);
 
+  let isNewUser = false;
   if (!user) {
+    isNewUser = true;
     const name = normalizedEmail.split('@')[0];
     const [newUser] = await db
       .insert(users)
@@ -42,7 +45,17 @@ export async function findOrCreateUser(email: string) {
   await ensureAdminRole(user.id, user.email);
 
   const [refreshed] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-  return refreshed ?? user;
+  const finalUser = refreshed ?? user;
+
+  if (isNewUser) {
+    void dispatchWebhookEvent('user.created', {
+      userId: finalUser.id,
+      email: finalUser.email,
+      name: finalUser.name,
+    });
+  }
+
+  return finalUser;
 }
 
 export async function loginUser(email: string) {

@@ -1,6 +1,12 @@
 import { getDb, users } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getCurrentUser } from '@/lib/session';
+import {
+  hasPermission,
+  isStaffRole,
+  type Permission,
+  type Role,
+} from '@/lib/permissions';
 
 export function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS || 'demo@msgnexus.ai';
@@ -17,6 +23,26 @@ export async function ensureAdminRole(userId: number, email: string) {
   await db.update(users).set({ role: 'admin' }).where(eq(users.id, userId));
 }
 
+export function isAdminUser(user: { role?: string | null; status?: string | null } | null): boolean {
+  return user?.role === 'admin' && user?.status !== 'suspended';
+}
+
+export function isStaffUser(user: { role?: string | null; status?: string | null } | null): boolean {
+  return isStaffRole(user?.role) && user?.status !== 'suspended';
+}
+
+export function canAccessAdminPortal(user: { role?: string | null; status?: string | null } | null): boolean {
+  return isStaffUser(user);
+}
+
+export async function requireStaff() {
+  const user = await getCurrentUser();
+  if (!user || !isStaffUser(user)) {
+    throw new Error('Staff access required');
+  }
+  return user;
+}
+
 export async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user || user.role !== 'admin') {
@@ -28,6 +54,16 @@ export async function requireAdmin() {
   return user;
 }
 
-export function isAdminUser(user: { role?: string | null; status?: string | null } | null): boolean {
-  return user?.role === 'admin' && user?.status !== 'suspended';
+export async function requirePermission(permission: Permission) {
+  const user = await requireStaff();
+  if (!hasPermission(user.role, permission)) {
+    throw new Error(`Permission required: ${permission}`);
+  }
+  return user;
 }
+
+export function userHasPermission(user: { role?: string | null }, permission: Permission): boolean {
+  return hasPermission(user.role, permission);
+}
+
+export type { Role, Permission };

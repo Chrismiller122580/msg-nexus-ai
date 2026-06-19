@@ -1,13 +1,14 @@
 'use server';
 
 import { getDb, subscriptions, users } from '@/db';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
+import { dispatchWebhookEvent } from '@/lib/webhooks';
 import { logAudit } from '@/lib/audit';
 import { eq, desc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 export async function listAdminSubscriptions() {
-  await requireAdmin();
+  await requirePermission('subscriptions.read');
   const db = getDb();
 
   const rows = await db
@@ -18,6 +19,8 @@ export async function listAdminSubscriptions() {
       status: subscriptions.status,
       currentPeriodEnd: subscriptions.currentPeriodEnd,
       cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+      stripeCustomerId: subscriptions.stripeCustomerId,
+      stripeSubscriptionId: subscriptions.stripeSubscriptionId,
       createdAt: subscriptions.createdAt,
       email: users.email,
       name: users.name,
@@ -38,7 +41,7 @@ export async function updateSubscriptionAdminAction(
   userId: number,
   updates: { plan?: 'free' | 'pro' | 'enterprise'; status?: 'active' | 'trialing' | 'cancelled' | 'past_due'; cancelAtPeriodEnd?: boolean }
 ) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission('subscriptions.write');
   const db = getDb();
 
   const [existing] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
@@ -56,6 +59,8 @@ export async function updateSubscriptionAdminAction(
     resourceId: String(userId),
     metadata: updates,
   });
+
+  await dispatchWebhookEvent('subscription.updated', { userId, ...updates, source: 'admin' });
 
   revalidatePath('/admin/subscriptions');
   revalidatePath('/admin/users');

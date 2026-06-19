@@ -4,7 +4,7 @@ export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: text('email').notNull().unique(),
   name: text('name'),
-  role: text('role').notNull().default('user'), // user | admin
+  role: text('role').notNull().default('user'), // user | support | billing | admin
   status: text('status').notNull().default('active'), // active | suspended
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -17,8 +17,33 @@ export const subscriptions = pgTable('subscriptions', {
   currentPeriodEnd: timestamp('current_period_end'),
   cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false),
   externalCustomerId: text('external_customer_id'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  stripePriceId: text('stripe_price_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const webhooks = pgTable('webhooks', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  secret: text('secret').notNull(),
+  events: jsonb('events').$type<string[]>().default([]),
+  enabled: boolean('enabled').default(true).notNull(),
+  lastTriggeredAt: timestamp('last_triggered_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const webhookDeliveries = pgTable('webhook_deliveries', {
+  id: serial('id').primaryKey(),
+  webhookId: integer('webhook_id').notNull().references(() => webhooks.id, { onDelete: 'cascade' }),
+  event: text('event').notNull(),
+  payload: jsonb('payload'),
+  status: text('status').notNull(),
+  responseCode: integer('response_code'),
+  responseBody: text('response_body'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 export const auditLogs = pgTable('audit_logs', {

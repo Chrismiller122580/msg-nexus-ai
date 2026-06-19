@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft, Mail, RefreshCw, Unplug, Loader2, Smartphone,
-  Hash, MessageCircle, Send, AtSign, Shield,
+  Hash, MessageCircle, Send, AtSign, Shield, CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
@@ -16,6 +16,7 @@ import { disconnectGmailAction, getGmailStatus, syncGmailAction } from '@/app/ac
 import { disconnectOutlookAction, getOutlookStatus, syncOutlookAction } from '@/app/actions/outlook';
 import { connectTwilioAction, disconnectTwilioAction, getTwilioStatus, syncTwilioAction } from '@/app/actions/twilio';
 import { syncAllIntegrationsAction } from '@/app/actions/integrations';
+import { getBillingStatus, startCheckoutAction, openBillingPortalAction } from '@/app/actions/billing';
 import {
   getAllPlatformStatuses,
   disconnectSlackAction, disconnectDiscordAction, disconnectTelegramAction,
@@ -34,7 +35,11 @@ export default function SettingsClient() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncing, setSyncing] = useState<Record<string, boolean>>({});
   const [userEmail, setUserEmail] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
+  const [billing, setBilling] = useState<{
+    configured: boolean; plan: string; status: string;
+    currentPeriodEnd?: string; hasStripeCustomer: boolean;
+  }>({ configured: false, plan: 'free', status: 'active', hasStripeCustomer: false });
   const [smsPhone, setSmsPhone] = useState('');
   const [waPhone, setWaPhone] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
@@ -68,7 +73,9 @@ export default function SettingsClient() {
         const user = await getCurrentUserAction();
         if (!user) { router.replace('/login?redirect=/settings'); return; }
         setUserEmail(user.email);
-        setIsAdmin(user.isAdmin);
+        setIsStaff(user.isStaff);
+        const b = await getBillingStatus();
+        setBilling(b);
         await reload();
       } catch {
         router.replace('/login?redirect=/settings');
@@ -101,6 +108,8 @@ export default function SettingsClient() {
     };
     const err = searchParams.get('error');
     if (err && errors[err]) toast.error(errors[err]);
+    if (searchParams.get('billing') === 'success') toast.success('Subscription updated');
+    if (searchParams.get('billing') === 'cancelled') toast.info('Checkout cancelled');
   }, [searchParams]);
 
   async function runSync(key: string, fn: () => Promise<{ error?: string; imported?: number }>) {
@@ -124,7 +133,7 @@ export default function SettingsClient() {
       <header className="border-b border-border px-6 h-16 flex items-center justify-between max-w-3xl mx-auto w-full">
         <MsgNexusLogo href="/inbox" />
         <div className="flex items-center gap-2">
-          {isAdmin && (
+          {isStaff && (
             <Link href="/admin" className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent">
               <Shield size={15} /> Admin
             </Link>
@@ -154,6 +163,50 @@ export default function SettingsClient() {
           }} disabled={syncingAll} className="btn btn-primary text-sm disabled:opacity-70">
             {syncingAll ? <><Loader2 className="animate-spin" size={16} /> Syncing...</> : <><RefreshCw size={16} /> Sync all</>}
           </button>
+        </div>
+
+        <div className="card p-5 mb-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold flex items-center gap-2"><CreditCard size={18} /> Billing</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Current plan: <span className="capitalize font-medium text-foreground">{billing.plan}</span>
+                {billing.status !== 'active' && <span className="text-amber-500"> ({billing.status})</span>}
+              </p>
+              {billing.currentPeriodEnd && (
+                <p className="text-xs text-muted-foreground mt-1">Renews {new Date(billing.currentPeriodEnd).toLocaleDateString()}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {billing.configured ? (
+                <>
+                  {billing.plan !== 'pro' && (
+                    <button onClick={async () => {
+                      const r = await startCheckoutAction('pro');
+                      if (r.error) toast.error(r.error);
+                      else if (r.url) window.location.href = r.url;
+                    }} className="btn btn-primary text-xs">Upgrade to Pro</button>
+                  )}
+                  {billing.plan !== 'enterprise' && (
+                    <button onClick={async () => {
+                      const r = await startCheckoutAction('enterprise');
+                      if (r.error) toast.error(r.error);
+                      else if (r.url) window.location.href = r.url;
+                    }} className="btn btn-secondary text-xs">Enterprise</button>
+                  )}
+                  {billing.hasStripeCustomer && (
+                    <button onClick={async () => {
+                      const r = await openBillingPortalAction();
+                      if (r.error) toast.error(r.error);
+                      else if (r.url) window.location.href = r.url;
+                    }} className="btn btn-ghost text-xs">Manage billing</button>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">Set STRIPE_SECRET_KEY and STRIPE_PRICE_PRO to enable</p>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">

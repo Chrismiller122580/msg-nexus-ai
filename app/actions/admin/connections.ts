@@ -6,7 +6,8 @@ import {
   slackConnections, discordConnections, telegramConnections,
   whatsappConnections, xConnections, connectedAccounts,
 } from '@/db/schema';
-import { requireAdmin } from '@/lib/admin';
+import { requirePermission } from '@/lib/admin';
+import { dispatchWebhookEvent } from '@/lib/webhooks';
 import { syncAllConnectors } from '@/lib/connectors/sync-all';
 import { logAudit } from '@/lib/audit';
 
@@ -20,7 +21,7 @@ type ConnectionRow = {
 };
 
 export async function listAdminConnections() {
-  await requireAdmin();
+  await requirePermission('connections.read');
   const db = getDb();
 
   const allUsers = await db.select({ id: users.id, email: users.email }).from(users);
@@ -140,7 +141,7 @@ export async function listAdminConnections() {
 }
 
 export async function triggerUserSyncAdminAction(userId: number) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission('connections.write');
   const result = await syncAllConnectors(userId);
 
   await logAudit({
@@ -150,6 +151,12 @@ export async function triggerUserSyncAdminAction(userId: number) {
     resource: 'user',
     resourceId: String(userId),
     metadata: { totalImported: result.totalImported },
+  });
+
+  await dispatchWebhookEvent('connection.synced', {
+    userId,
+    totalImported: result.totalImported,
+    source: 'admin',
   });
 
   return { success: true, totalImported: result.totalImported };
