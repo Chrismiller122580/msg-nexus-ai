@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push --force",
+    "db:status": "node scripts/db-status.mjs",
+    "db:neon:setup": "node scripts/setup-neon.mjs",
+    "vercel:env:pull": "npx vercel env pull .env.local",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "vercel-build": "node scripts/vercel-prebuild.mjs && npm run db:push && npm run build"

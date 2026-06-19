@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { defineConfig } from 'drizzle-kit';
+import { getDatabaseUrl } from './lib/database-url';
 
 // Load .env.local for drizzle-kit CLI (Next.js loads this automatically at runtime)
 const envLocal = resolve(process.cwd(), '.env.local');
@@ -27,7 +28,7 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    url: getDatabaseUrl(),
   },
   verbose: true,
   strict: true,
