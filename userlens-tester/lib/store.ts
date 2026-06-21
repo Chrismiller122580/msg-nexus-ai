@@ -1,4 +1,4 @@
-export type TestType = 'smoke' | 'a11y' | 'lighthouse' | 'full';
+export type TestType = 'smoke' | 'a11y' | 'lighthouse' | 'mobile' | 'full';
 
 export type RunStatus = 'pending' | 'running' | 'passed' | 'failed';
 
@@ -13,6 +13,12 @@ export interface UserlensRun {
   smoke?: { ok: boolean; statusCode?: number; title?: string; error?: string };
   a11y?: { violations: number; passes: number; incomplete: number; summary: unknown[] };
   lighthouse?: {
+    performance: number;
+    accessibility: number;
+    bestPractices: number;
+    seo: number;
+  };
+  lighthouseMobile?: {
     performance: number;
     accessibility: number;
     bestPractices: number;
