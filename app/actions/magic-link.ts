@@ -1,11 +1,10 @@
 'use server';
 
 import { getDb, magicLinks } from '@/db';
-import { eq, and, gt, isNull } from 'drizzle-orm';
 import { getAppUrl } from '@/lib/app-url';
 import { getDbErrorMessage } from '@/lib/db-error';
-import { loginUser } from '@/lib/auth-user';
 import { generateId } from '@/lib/utils';
+import { verifyMagicLinkToken } from '@/lib/verify-magic-link';
 
 export async function requestMagicLinkAction(email: string): Promise<{
   success?: boolean;
@@ -69,39 +68,5 @@ export async function requestMagicLinkAction(email: string): Promise<{
 }
 
 export async function verifyMagicLinkAction(token: string) {
-  if (!token) {
-    return { error: 'Invalid link' };
-  }
-
-  try {
-    const db = getDb();
-    const now = new Date();
-
-    const [link] = await db
-      .select()
-      .from(magicLinks)
-      .where(
-        and(
-          eq(magicLinks.token, token),
-          gt(magicLinks.expiresAt, now),
-          isNull(magicLinks.usedAt)
-        )
-      )
-      .limit(1);
-
-    if (!link) {
-      return { error: 'This link is invalid or has expired.' };
-    }
-
-    await db
-      .update(magicLinks)
-      .set({ usedAt: now })
-      .where(eq(magicLinks.id, link.id));
-
-    const result = await loginUser(link.email);
-    return { success: true, ...result };
-  } catch (err: unknown) {
-    console.error('verifyMagicLinkAction error:', err);
-    return { error: 'Verification failed. Please request a new link.' };
-  }
+  return verifyMagicLinkToken(token);
 }

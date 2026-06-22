@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Mail } from 'lucide-react';
@@ -20,6 +20,17 @@ export default function LoginPage() {
   const [magicSent, setMagicSent] = useState(false);
   const [devLink, setDevLink] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get('error');
+    const messages: Record<string, string> = {
+      'missing-token': 'Sign-in link is missing a token.',
+      'magic-link-expired': 'This link is invalid or has expired. Request a new one.',
+      'magic-link-failed': 'Verification failed. Please request a new link.',
+      'magic-link-db': 'Could not reach the database. Try again in a moment.',
+    };
+    if (err && messages[err]) setError(messages[err]);
+  }, []);
 
   const redirectAfterLogin = (result: LoginResult) => {
     if (result.onboarded) {

@@ -5,6 +5,6 @@ export async function GET() {
     ok: true,
     service: 'userlens-tester',
     version: '1.0.0',
-    tests: ['smoke', 'a11y', 'lighthouse', 'full'],
+    tests: ['smoke', 'a11y', 'lighthouse', 'mobile', 'full'],
   });
 }
