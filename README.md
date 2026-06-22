@@ -87,6 +87,20 @@ See [SETUP.md](SETUP.md) for more.
 
 See `drizzle.config.ts` and `db/` for DB config.
 
+## UserLens (UX Auditor)
+
+Admin portal at **`/admin/userlens`** — live site scans (smoke, axe a11y, Lighthouse desktop/mobile), UX score trends, and one-click **Composer fix** export.
+
+```bash
+# Terminal 1 — main app
+npm run dev
+
+# Terminal 2 — scanner service
+cd userlens-tester && npm run dev -- -p 3001
+```
+
+See [docs/USERLENS.md](docs/USERLENS.md) for full setup and deployment.
+
 ## Next Steps (Roadmap)
 See [ROADMAP.md](ROADMAP.md) and [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 

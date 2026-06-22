@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: [
+    'lighthouse',
+    'chrome-launcher',
+    'playwright',
+    'axe-core',
+  ],
+  turbopack: {
+    root: __dirname,
+  },
 };
 
 export default nextConfig;

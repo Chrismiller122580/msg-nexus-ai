@@ -1,4 +1,4 @@
-export type UserlensTestType = 'smoke' | 'a11y' | 'lighthouse' | 'full';
+export type UserlensTestType = 'smoke' | 'a11y' | 'lighthouse' | 'mobile' | 'full';
 
 export interface UserlensRunResult {
   id: string;
@@ -11,6 +11,12 @@ export interface UserlensRunResult {
   smoke?: { ok: boolean; statusCode?: number; title?: string; error?: string };
   a11y?: { violations: number; passes: number; incomplete: number; summary: unknown[] };
   lighthouse?: {
+    performance: number;
+    accessibility: number;
+    bestPractices: number;
+    seo: number;
+  };
+  lighthouseMobile?: {
     performance: number;
     accessibility: number;
     bestPractices: number;

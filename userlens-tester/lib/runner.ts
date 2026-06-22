@@ -44,19 +44,24 @@ async function runA11y(url: string) {
       violations: r.violations?.length ?? 0,
       passes: r.passes?.length ?? 0,
       incomplete: r.incomplete?.length ?? 0,
-      summary: (r.violations ?? []).slice(0, 10).map((v: { id: string; impact: string; description: string; nodes: unknown[] }) => ({
-        id: v.id,
-        impact: v.impact,
-        description: v.description,
-        nodes: v.nodes?.length ?? 0,
-      })),
+      summary: (r.violations ?? []).slice(0, 10).map((raw) => {
+        const v = raw as { id: string; impact: string; description: string; nodes?: unknown[] };
+        return {
+          id: v.id,
+          impact: v.impact,
+          description: v.description,
+          nodes: v.nodes?.length ?? 0,
+        };
+      }),
     };
   } finally {
     await browser.close();
   }
 }
 
-async function runLighthouse(url: string) {
+type LighthouseFormFactor = 'desktop' | 'mobile';
+
+async function runLighthouse(url: string, formFactor: LighthouseFormFactor = 'desktop') {
   const chromeLauncher = await import('chrome-launcher');
   const lighthouse = (await import('lighthouse')).default;
   const chrome = await chromeLauncher.launch({
@@ -67,8 +72,8 @@ async function runLighthouse(url: string) {
       port: chrome.port,
       output: 'json',
       onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
-      formFactor: 'desktop',
-      screenEmulation: { disabled: true },
+      formFactor,
+      screenEmulation: formFactor === 'desktop' ? { disabled: true } : undefined,
     });
     const cats = result?.lhr?.categories ?? {};
     const score = (cat: { score?: number | null } | undefined) =>
@@ -87,18 +92,20 @@ async function runLighthouse(url: string) {
 export async function executeRun(run: UserlensRun): Promise<UserlensRun> {
   const start = Date.now();
   const tests = run.tests.includes('full')
-    ? (['smoke', 'a11y', 'lighthouse'] as TestType[])
+    ? (['smoke', 'a11y', 'lighthouse', 'mobile'] as TestType[])
     : run.tests;
 
   try {
     if (tests.includes('smoke')) run.smoke = await runSmoke(run.url);
     if (tests.includes('a11y')) run.a11y = await runA11y(run.url);
-    if (tests.includes('lighthouse')) run.lighthouse = await runLighthouse(run.url);
+    if (tests.includes('lighthouse')) run.lighthouse = await runLighthouse(run.url, 'desktop');
+    if (tests.includes('mobile')) run.lighthouseMobile = await runLighthouse(run.url, 'mobile');
 
     const failed =
       (run.smoke && !run.smoke.ok) ||
       (run.a11y && run.a11y.violations > 0) ||
-      (run.lighthouse && run.lighthouse.performance < 50);
+      (run.lighthouse && run.lighthouse.performance < 50) ||
+      (run.lighthouseMobile && run.lighthouseMobile.performance < 40);
 
     run.status = failed ? 'failed' : 'passed';
   } catch (e) {
