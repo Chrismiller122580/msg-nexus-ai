@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createSession } from '@/lib/session';
 import { ensureAdminRole } from '@/lib/admin';
 import { dispatchWebhookEvent } from '@/lib/webhooks';
+import { sendWelcomeEmail } from '@/lib/resend';
 
 export async function findOrCreateUser(email: string) {
   const normalizedEmail = email.toLowerCase().trim();
@@ -50,6 +51,10 @@ export async function findOrCreateUser(email: string) {
   if (isNewUser) {
     void dispatchWebhookEvent('user.created', {
       userId: finalUser.id,
+      email: finalUser.email,
+      name: finalUser.name,
+    });
+    void sendWelcomeEmail({
       email: finalUser.email,
       name: finalUser.name,
     });
