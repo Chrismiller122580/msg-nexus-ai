@@ -51,6 +51,32 @@ export async function checkUserlensHealth(): Promise<{
   }
 }
 
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`Empty response from UserLens service (HTTP ${res.status})`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid JSON from UserLens service (HTTP ${res.status})`);
+  }
+}
+
+async function pollUserlensRun(base: string, runId: string, timeoutMs = 300000): Promise<UserlensRunResult> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await fetch(`${base}/api/runs/${runId}`, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) {
+      throw new Error(`UserLens poll error (${res.status})`);
+    }
+    const data = await parseJsonResponse<{ run: UserlensRunResult }>(res);
+    if (data.run.status !== 'running') return data.run;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error('UserLens scan timed out after 5 minutes');
+}
+
 export async function triggerUserlensRun(
   url: string,
   tests: UserlensTestType[]
@@ -60,15 +86,18 @@ export async function triggerUserlensRun(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, tests }),
-    signal: AbortSignal.timeout(300000),
+    signal: AbortSignal.timeout(30000),
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `UserLens service error (${res.status})`);
+  if (!res.ok && res.status !== 202) {
+    const err = await parseJsonResponse<{ error?: string }>(res).catch(() => ({} as { error?: string }));
+    throw new Error(err.error || `UserLens service error (${res.status})`);
   }
 
-  const data = await res.json() as { run: UserlensRunResult };
+  const data = await parseJsonResponse<{ run: UserlensRunResult; accepted?: boolean }>(res);
+  if (data.run.status === 'running' || data.accepted) {
+    return pollUserlensRun(base, data.run.id);
+  }
   return data.run;
 }
 

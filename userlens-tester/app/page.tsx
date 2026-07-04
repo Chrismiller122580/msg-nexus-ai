@@ -34,6 +34,29 @@ const PRESETS: { label: string; tests: TestType[] }[] = [
   { label: 'Mobile', tests: ['mobile'] },
 ];
 
+async function parseJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`Server returned empty response (HTTP ${res.status}). The scan may still be running — refresh history.`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Invalid server response (HTTP ${res.status})`);
+  }
+}
+
+async function pollRun(runId: string): Promise<Run> {
+  const deadline = Date.now() + 300000;
+  while (Date.now() < deadline) {
+    const res = await fetch(`/api/runs/${runId}`);
+    const data = await parseJson<{ run: Run }>(res);
+    if (data.run.status !== 'running') return data.run;
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error('Scan timed out after 5 minutes — check history for partial results');
+}
+
 function uxScore(run: Run): number | null {
   const scores: number[] = [];
   if (run.lighthouse?.performance != null) scores.push(run.lighthouse.performance);
@@ -56,12 +79,14 @@ export default function Home() {
   const [url, setUrl] = useState('https://vercel.com');
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
+      const [hRes, rRes] = await Promise.all([fetch('/api/health'), fetch('/api/runs')]);
       const [h, r] = await Promise.all([
-        fetch('/api/health').then((res) => res.json()),
-        fetch('/api/runs').then((res) => res.json()),
+        parseJson<Health>(hRes),
+        parseJson<{ runs: Run[] }>(rRes),
       ]);
       setHealth(h);
       setRuns(r.runs ?? []);
@@ -78,17 +103,26 @@ export default function Home() {
   async function runScan(tests: TestType[]) {
     setRunning(true);
     setError(null);
+    setProgress('Starting scan…');
     try {
       const res = await fetch('/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, tests }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const data = await parseJson<{ run: Run; error?: string; accepted?: boolean }>(res);
+      if (!res.ok && res.status !== 202) throw new Error(data.error || `HTTP ${res.status}`);
+
+      if (data.run.status === 'running' || data.accepted) {
+        setProgress('Scan running — polling for results (1–3 min for full scan)…');
+        await pollRun(data.run.id);
+      }
       await refresh();
+      setProgress(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Scan failed');
+      setProgress(null);
+      await refresh();
     } finally {
       setRunning(false);
     }
@@ -135,6 +169,7 @@ export default function Home() {
               </button>
             ))}
           </div>
+          {progress && <p className="text-sm text-accent">{progress}</p>}
           {error && <p className="text-sm text-rose-500">{error}</p>}
           <p className="text-xs text-muted-foreground">
             Full scan runs smoke + axe accessibility + desktop &amp; mobile Lighthouse (may take 1–3 min).
@@ -204,6 +239,7 @@ export default function Home() {
             <li><span className="text-emerald-600">GET</span> /api/health</li>
             <li><span className="text-blue-600">POST</span> /api/run — {'{ url, tests }'}</li>
             <li><span className="text-emerald-600">GET</span> /api/runs</li>
+            <li><span className="text-emerald-600">GET</span> /api/runs/:id — poll status</li>
           </ul>
           <p className="text-xs text-muted-foreground pt-2">
             Point MsgNexus <code className="bg-muted px-1 rounded">USERLENS_SERVICE_URL</code> at this service.

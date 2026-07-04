@@ -10,8 +10,13 @@ function loadAxeSource() {
   return readFileSync(axePath, 'utf8');
 }
 
+const CHROMIUM_OPTS = {
+  headless: true,
+  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+} as const;
+
 async function runSmoke(url: string) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(CHROMIUM_OPTS);
   try {
     const page = await browser.newPage();
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -29,7 +34,7 @@ async function runSmoke(url: string) {
 }
 
 async function runA11y(url: string) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(CHROMIUM_OPTS);
   try {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });

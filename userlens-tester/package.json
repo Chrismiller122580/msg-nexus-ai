@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "npx playwright install chromium || true"
   },
   "dependencies": {
     "@playwright/test": "^1.61.0",
