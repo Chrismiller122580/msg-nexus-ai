@@ -44,6 +44,22 @@ export async function saveSmsMessage(input: SaveSmsInput): Promise<string> {
   return id;
 }
 
+export async function updateSmsStatusBySid(
+  messageSid: string,
+  status: SmsStatus
+): Promise<boolean> {
+  const db = getDb();
+  const [row] = await db
+    .select({ id: smsMessages.id })
+    .from(smsMessages)
+    .where(eq(smsMessages.messageSid, messageSid))
+    .limit(1);
+  if (!row) return false;
+
+  await db.update(smsMessages).set({ status }).where(eq(smsMessages.messageSid, messageSid));
+  return true;
+}
+
 export async function listSmsForUser(userId: number, limit = 50) {
   const db = getDb();
   return db

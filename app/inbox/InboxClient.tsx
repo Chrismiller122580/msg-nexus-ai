@@ -23,6 +23,7 @@ import {
 import { getConnectedAccounts } from '../actions/onboarding';
 import { getCurrentUserAction } from '../actions/user';
 import { getGmailStatus, syncGmailAction } from '../actions/gmail';
+import { getTwilioStatus, sendSmsAction } from '../actions/twilio';
 import { MsgNexusLogo } from '../components/MsgNexusLogo';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
@@ -50,6 +51,11 @@ export default function InboxClient() {
     lastSyncedAt?: string;
   }>({ configured: false, connected: false });
   const [syncingGmail, setSyncingGmail] = useState(false);
+  const [twilioSmsConnected, setTwilioSmsConnected] = useState(false);
+  const [smsReplyText, setSmsReplyText] = useState('');
+  const [sendingSmsReply, setSendingSmsReply] = useState(false);
+  const [showAsk, setShowAsk] = useState(false);
+  const [askQuery, setAskQuery] = useState('');
   const [filters, setFilters] = useState<Filters>(() => ({
     platforms: new Set(PLATFORMS.map((p) => p.id)),
     categories: new Set(ALL_CATEGORIES),
@@ -64,9 +70,10 @@ export default function InboxClient() {
           return;
         }
         setUser(u);
-        const [cas, gmail] = await Promise.all([getConnectedAccounts(), getGmailStatus()]);
+        const [cas, gmail, twilio] = await Promise.all([getConnectedAccounts(), getGmailStatus(), getTwilioStatus()]);
         setConnectedAccounts(cas);
         setGmailStatus(gmail);
+        setTwilioSmsConnected(twilio.connected);
 
         const platformIds = [...new Set(cas.map((a: { platformId: string }) => a.platformId))];
         const platforms =
@@ -226,6 +233,15 @@ export default function InboxClient() {
   }, [selectedMessageId, messages]);
 
   const selectedInsight = selectedMessage ? insights[selectedMessage.id] : undefined;
+
+  const askResults = useMemo(() => {
+    if (!askQuery.trim()) return [];
+    return searchMessages(askQuery, filteredMessages, insights).slice(0, 8);
+  }, [askQuery, filteredMessages, insights]);
+
+  useEffect(() => {
+    setSmsReplyText('');
+  }, [selectedMessageId]);
 
   const aggregates = useMemo(() => {
     const { subs, bills, shopping, monthlyRecurring } = getTopInsights(filteredMessages, insights);
@@ -578,6 +594,13 @@ export default function InboxClient() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowAsk((v) => !v)}
+            className={cn('btn', showAsk ? 'btn-primary' : 'btn-secondary')}
+            title="Ask MsgNexus — semantic search over your messages"
+          >
+            Ask
+          </button>
+          <button
             onClick={() => setView('inbox')}
             className={cn('btn', view === 'inbox' ? 'btn-primary' : 'btn-secondary')}
           >
@@ -624,6 +647,45 @@ export default function InboxClient() {
           </button>
         </div>
       </div>
+
+      {showAsk && (
+        <div className="max-w-[1400px] mx-auto w-full px-6 pb-3">
+          <div className="card p-4 space-y-3">
+            <div className="text-sm font-medium">Ask MsgNexus</div>
+            <p className="text-xs text-muted-foreground">
+              Natural-language search over your messages — try &quot;netflix subscription&quot;, &quot;rent due&quot;, or &quot;amazon orders&quot;.
+            </p>
+            <input
+              value={askQuery}
+              onChange={(e) => setAskQuery(e.target.value)}
+              placeholder="What are you looking for?"
+              className="search-input"
+            />
+            {askQuery.trim() && (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {askResults.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No matching messages found.</p>
+                ) : (
+                  askResults.map((r) => (
+                    <button
+                      key={r.message.id}
+                      type="button"
+                      onClick={() => { setSelectedMessageId(r.message.id); setView('inbox'); }}
+                      className="w-full text-left rounded-xl border border-border p-3 hover:bg-muted/60 transition text-sm"
+                    >
+                      <div className="flex justify-between gap-2 text-xs text-muted-foreground mb-1">
+                        <span>{r.message.from}</span>
+                        <span>{Math.round(r.score * 100)}% match</span>
+                      </div>
+                      <div className="line-clamp-2">{r.message.body}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="max-w-[1400px] mx-auto w-full flex-1 px-6 pb-10 grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Sidebar */}
@@ -889,10 +951,49 @@ export default function InboxClient() {
                   )}
                 </div>
 
-                <div className="flex gap-2 mt-4">
-                  <button onClick={() => deleteMessage(selectedMessage.id)} className="btn btn-secondary flex-1 text-red-500">Delete</button>
-                  <button onClick={() => toast('Demo only — reply composer coming in a future phase')} className="btn btn-secondary flex-1">Simulate reply</button>
-                </div>
+                {selectedMessage.platformId === 'sms' && twilioSmsConnected ? (
+                  <div className="mt-4 space-y-2">
+                    <textarea
+                      value={smsReplyText}
+                      onChange={(e) => setSmsReplyText(e.target.value)}
+                      rows={2}
+                      placeholder={`Reply to ${selectedMessage.from}...`}
+                      className="w-full bg-input border border-input-border rounded-2xl px-3 py-2 text-sm resize-none"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => deleteMessage(selectedMessage.id)} className="btn btn-secondary flex-1 text-red-500">Delete</button>
+                      <button
+                        disabled={sendingSmsReply || !smsReplyText.trim()}
+                        onClick={async () => {
+                          setSendingSmsReply(true);
+                          try {
+                            const r = await sendSmsAction(selectedMessage.from, smsReplyText.trim());
+                            if (r.error) throw new Error(r.error);
+                            toast.success('SMS sent');
+                            setSmsReplyText('');
+                            const data = await getUserMessages();
+                            setMessages(data.messages);
+                            setInsights(data.insights);
+                          } catch (e) {
+                            toast.error(e instanceof Error ? e.message : 'Send failed');
+                          } finally {
+                            setSendingSmsReply(false);
+                          }
+                        }}
+                        className="btn btn-primary flex-1 disabled:opacity-50"
+                      >
+                        {sendingSmsReply ? 'Sending…' : 'Reply via SMS'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 mt-4">
+                    <button onClick={() => deleteMessage(selectedMessage.id)} className="btn btn-secondary flex-1 text-red-500">Delete</button>
+                    {selectedMessage.platformId === 'sms' && !twilioSmsConnected && (
+                      <Link href="/settings" className="btn btn-secondary flex-1 text-center">Connect SMS in Settings</Link>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

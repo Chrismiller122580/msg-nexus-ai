@@ -76,10 +76,10 @@ For real inbound/outbound SMS (single-tenant — one Twilio number, one user):
    TWILIO_AUTO_REPLY=false
    ```
 
-3. **Webhook** — in Twilio Console → Phone Numbers → your number → Messaging:
-   - "A message comes in" → **Webhook** → `POST`
-   - URL: `{NEXT_PUBLIC_APP_URL}/api/webhooks/twilio`
-   - In Codespaces this URL is auto-detected; on Vercel set `NEXT_PUBLIC_APP_URL` to your production domain.
+3. **Webhooks** — in Twilio Console → Phone Numbers → your number → Messaging:
+   - "A message comes in" → **Webhook** → `POST` → `{NEXT_PUBLIC_APP_URL}/api/webhooks/twilio`
+   - "Status callback" (optional) → `POST` → `{NEXT_PUBLIC_APP_URL}/api/webhooks/twilio/status`
+   - In Codespaces the URL is auto-detected; on Vercel set `NEXT_PUBLIC_APP_URL` to your production domain.
 
 4. **App** — sign in → **Settings** → SMS (Twilio):
    - Enter the same E.164 number as `TWILIO_PHONE_NUMBER`

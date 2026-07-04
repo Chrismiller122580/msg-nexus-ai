@@ -50,10 +50,44 @@ export async function getSlackUser(accessToken: string) {
   return data.user?.name || data.user?.email || 'Slack user';
 }
 
+async function refreshSlackToken(refreshToken: string) {
+  const res = await fetch('https://slack.com/api/oauth.v2.access', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.SLACK_CLIENT_ID!,
+      client_secret: process.env.SLACK_CLIENT_SECRET!,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  });
+  const data = await res.json() as {
+    ok: boolean;
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+  };
+  if (!data.ok || !data.access_token) throw new Error('Failed to refresh Slack token');
+  return data;
+}
+
 export async function getValidSlackToken(userId: number): Promise<string | null> {
   const db = getDb();
   const [conn] = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId)).limit(1);
-  return conn?.accessToken ?? null;
+  if (!conn) return null;
+
+  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
+  if (expiresAt > Date.now() + 60_000) return conn.accessToken;
+  if (!conn.refreshToken) return conn.accessToken;
+
+  const refreshed = await refreshSlackToken(conn.refreshToken);
+  await db.update(slackConnections).set({
+    accessToken: refreshed.access_token!,
+    refreshToken: refreshed.refresh_token ?? conn.refreshToken,
+    expiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000) : null,
+  }).where(eq(slackConnections.userId, userId));
+
+  return refreshed.access_token!;
 }
 
 interface SlackMessage {

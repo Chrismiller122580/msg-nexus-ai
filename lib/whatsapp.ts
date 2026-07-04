@@ -10,36 +10,17 @@ export function normalizeWhatsAppPhone(input: string): string {
   return digits;
 }
 
-export async function fetchRecentWhatsAppMessages(phoneNumber: string, max = 25) {
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return [];
+export type WhatsAppFetchedMessage = {
+  externalId: string;
+  from: string;
+  body: string;
+  timestamp: string;
+};
 
-  const res = await fetch(
-    `https://graph.facebook.com/v19.0/${phoneId}/messages?limit=${max}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!res.ok) return [];
-
-  const data = await res.json() as {
-    data?: Array<{
-      id: string;
-      from?: string;
-      timestamp?: string;
-      type?: string;
-      text?: { body?: string };
-    }>;
-  };
-
-  if (!data.data) return [];
-
-  const normalized = normalizeWhatsAppPhone(phoneNumber);
-  return data.data
-    .filter((m) => !normalized || normalizeWhatsAppPhone(m.from || '') === normalized || !m.from)
-    .map((m) => ({
-      externalId: m.id,
-      from: m.from ? `+${m.from}` : 'WhatsApp',
-      body: m.text?.body || '(WhatsApp message)',
-      timestamp: m.timestamp ? new Date(Number(m.timestamp) * 1000).toISOString() : new Date().toISOString(),
-    }));
+/** WhatsApp Cloud API does not expose a message history list endpoint. Use webhooks for inbound. */
+export async function fetchRecentWhatsAppMessages(
+  _phoneNumber: string,
+  _max = 25
+): Promise<WhatsAppFetchedMessage[]> {
+  return [];
 }

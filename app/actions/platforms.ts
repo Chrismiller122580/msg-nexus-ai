@@ -8,7 +8,7 @@ import { isSlackConfigured } from '@/lib/slack';
 import { syncSlackForUser } from '@/lib/slack-sync';
 import { isDiscordConfigured } from '@/lib/discord';
 import { syncDiscordForUser } from '@/lib/discord-sync';
-import { isTelegramConfigured, createTelegramLinkCode } from '@/lib/telegram';
+import { isTelegramConfigured, createTelegramLinkCode, ensureTelegramWebhook } from '@/lib/telegram';
 import { syncTelegramForUser } from '@/lib/telegram-sync';
 import { isWhatsAppConfigured, normalizeWhatsAppPhone } from '@/lib/whatsapp';
 import { syncWhatsAppForUser } from '@/lib/whatsapp-sync';
@@ -171,16 +171,18 @@ export async function syncXAction() {
   return { success: true, imported: result.imported };
 }
 
-export async function startTelegramLinkAction(): Promise<{ success?: boolean; error?: string; linkCode?: string; botUsername?: string }> {
+export async function startTelegramLinkAction(): Promise<{ success?: boolean; error?: string; linkCode?: string; botUsername?: string; webhookError?: string }> {
   try {
     const user = await requireUser();
     if (!isTelegramConfigured()) return { error: 'Telegram bot is not configured on the server.' };
     const linkCode = await createTelegramLinkCode(user.id);
+    const webhook = await ensureTelegramWebhook();
     revalidatePath('/settings');
     return {
       success: true,
       linkCode,
       botUsername: process.env.TELEGRAM_BOT_USERNAME || 'your_bot',
+      webhookError: webhook.ok ? undefined : webhook.error,
     };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : 'Failed to start Telegram link' };

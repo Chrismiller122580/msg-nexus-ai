@@ -1,29 +1,27 @@
 # Roadmap
 
-## ✅ Phase 1: Core unification and basic AI parser (Shipped)
-- Unified inbox UI across 8 simulated platforms
-- Local semantic search (hybrid vector + keyword, pure client-side)
-- Local deterministic AI parser for bills, subscriptions, shopping (amounts, vendors, due dates, recurring)
-- Pulse dashboard with live aggregates & summaries
-- Add simulated messages, bulk + per-message analysis, filters, full export/import/reset
-- Self-contained Next.js app, zero backend or keys required
+## Phase 1: Core unification and basic AI parser (Shipped)
+- Unified inbox UI across 8 platforms
+- Local semantic search (hybrid vector + keyword)
+- Local deterministic AI parser for bills, subscriptions, shopping
+- Pulse dashboard with live aggregates and summaries
+- Add simulated messages, bulk + per-message analysis, filters, export/import/reset
+- Postgres persistence, magic link auth, multi-account onboarding
 
-## Phase 2: Full 25 platforms
-- Expand platform registry + realistic seed variety
-- Real connector interfaces (stubs + examples):
-  - WhatsApp (Business API or web bridge)
-  - Gmail / Outlook (IMAP or Gmail API)
-  - Slack, Discord, Telegram, SMS (Twilio), etc.
-- Background sync simulation or webhook receivers
-- Threading & deduplication
+## Phase 2: Real platform connectors (In progress)
+- **Shipped:** Gmail, Outlook, Twilio SMS (send + webhook + sync), Slack, Discord, Telegram, WhatsApp, X
+- **Shipped:** Admin portal, RBAC, Stripe billing, public API v1, UserLens UX auditor
+- **In progress:** Integration hardening (webhook automation, token refresh, sync limits)
+- **Remaining:** iMessage (Mac relay), Teams, Signal, additional platforms from [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
+- Threading, deduplication, incremental sync cursors
 
-## Phase 3: Polished app + intelligence
-- Optional real LLM calls (xAI / local via Ollama) to improve parser + summaries
-- “Ask MsgNexus” RAG chat over your messages
-- Reminders, calendar export, rules engine (“auto-hide Amazon orders under $20”)
-- Multi-account & cloud sync option (opt-in)
-- Beautiful mobile experience + PWA
-- Onboarding, settings, themes, keyboard power-user features
-- Tests, CI, production deployment examples
+## Phase 3: Polished app + intelligence (Started)
+- **Started:** Ask MsgNexus semantic Q&A panel in inbox
+- **Started:** PWA manifest for mobile install
+- Optional real LLM calls (xAI / Ollama) to improve parser + summaries
+- Full RAG chat over messages
+- Reminders, calendar export, rules engine
+- Mobile experience polish
+- CI + integration tests
 
-Contributions and ideas welcome! Start by running the Phase 1 demo and opening an issue.
+Contributions welcome — run the app with `npm run dev` and open an issue.

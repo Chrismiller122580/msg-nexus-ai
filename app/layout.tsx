@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MsgNexus.AI",
   description: "Unify all your messaging • Semantic search anywhere • AI that spots bills, subs & shopping automatically",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "MsgNexus",
+  },
   icons: {
     icon: [{ url: "/icon", type: "image/png" }],
   },

@@ -1,6 +1,6 @@
 import { getDb, whatsappConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { fetchRecentWhatsAppMessages, isWhatsAppConfigured, normalizeWhatsAppPhone } from '@/lib/whatsapp';
+import { fetchRecentWhatsAppMessages, isWhatsAppConfigured } from '@/lib/whatsapp';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 
 export async function syncWhatsAppForUser(userId: number, limit = 25) {
@@ -15,14 +15,21 @@ export async function syncWhatsAppForUser(userId: number, limit = 25) {
   await ensureConnectedAccount(userId, 'whatsapp', conn.phoneNumber, 'WhatsApp');
 
   const messages = await fetchRecentWhatsAppMessages(conn.phoneNumber, limit);
-  const imported = await ingestMessages(
-    userId,
-    messages.map((m) => ({ ...m, platformId: 'whatsapp' as const })),
-    'whatsapp'
-  );
+  const imported = messages.length
+    ? await ingestMessages(
+        userId,
+        messages.map((m) => ({ ...m, platformId: 'whatsapp' as const })),
+        'whatsapp'
+      )
+    : 0;
 
   await db.update(whatsappConnections).set({ lastSyncedAt: new Date() }).where(eq(whatsappConnections.userId, userId));
-  return { imported };
+  return {
+    imported,
+    error: imported === 0
+      ? 'WhatsApp Cloud API is webhook-only — new messages arrive at /api/webhooks/whatsapp automatically.'
+      : undefined,
+  };
 }
 
 export async function ingestWhatsAppWebhookMessage(
@@ -44,15 +51,10 @@ export async function ingestWhatsAppWebhookMessage(
   }], 'whatsapp');
 }
 
-export async function findWhatsAppUserByPhone(from: string): Promise<number | null> {
+/** Resolve user for inbound webhook. `from` is the customer phone, not the business number. */
+export async function findWhatsAppUserByPhone(_from: string): Promise<number | null> {
   const db = getDb();
-  const normalized = normalizeWhatsAppPhone(from);
   const connections = await db.select().from(whatsappConnections);
-  for (const conn of connections) {
-    if (normalizeWhatsAppPhone(conn.phoneNumber) === normalized) {
-      return conn.userId;
-    }
-  }
   if (connections.length === 1) return connections[0].userId;
   return null;
 }
