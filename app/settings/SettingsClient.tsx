@@ -41,6 +41,7 @@ export default function SettingsClient() {
     currentPeriodEnd?: string; hasStripeCustomer: boolean;
   }>({ configured: false, plan: 'free', status: 'active', hasStripeCustomer: false });
   const [smsPhone, setSmsPhone] = useState('');
+  const [testSmsSending, setTestSmsSending] = useState(false);
   const [waPhone, setWaPhone] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
   const [gmail, setGmail] = useState<Status>({ configured: false, connected: false });
@@ -56,7 +57,7 @@ export default function SettingsClient() {
     const [g, o, t, p] = await Promise.all([getGmailStatus(), getOutlookStatus(), getTwilioStatus(), getAllPlatformStatuses()]);
     setGmail(g);
     setOutlook(o);
-    setTwilio(t);
+    setTwilio({ ...t, identifier: t.phoneNumber });
     setSlack(p.slack);
     setDiscord(p.discord);
     setTelegram(p.telegram);
@@ -230,16 +231,80 @@ export default function SettingsClient() {
             status={xPlatform} connectHref="/api/auth/x" onSync={() => runSync('x', syncXAction)}
             syncing={syncing.x} onDisconnect={async () => { await disconnectXAction(); await reload(); toast.success('Disconnected'); }} />
 
-          <PhoneCard icon={<Smartphone className="text-emerald-500" size={20} />} title="SMS (Twilio)" hint="TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN"
-            status={twilio} phone={smsPhone} setPhone={setSmsPhone}
-            onConnect={async () => {
-              const r = await connectTwilioAction(smsPhone);
-              if (r.error) toast.error(r.error);
-              else { toast.success('SMS connected'); await reload(); await runSync('twilio', syncTwilioAction); }
-            }}
-            onSync={() => runSync('twilio', syncTwilioAction)} syncing={syncing.twilio}
-            onDisconnect={async () => { await disconnectTwilioAction(); await reload(); toast.success('Disconnected'); }}
-            webhookUrl={`${webhookBase}/api/webhooks/twilio`} />
+          <div className="card p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center">
+                <Smartphone className="text-emerald-500" size={20} />
+              </div>
+              <div>
+                <h2 className="font-semibold">SMS (Twilio)</h2>
+                <p className="text-sm text-muted-foreground">Connect your Twilio number for inbound webhooks, sync, and send</p>
+              </div>
+            </div>
+            {!twilio.configured && (
+              <p className="text-sm text-amber-600">Server needs <code className="text-xs">TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER</code></p>
+            )}
+            {twilio.connected ? (
+              <>
+                <ConnectedActions identifier={twilio.identifier} lastSyncedAt={twilio.lastSyncedAt}
+                  onSync={() => runSync('twilio', syncTwilioAction)} syncing={syncing.twilio}
+                  onDisconnect={async () => { await disconnectTwilioAction(); await reload(); toast.success('Disconnected'); }} />
+                <div className="pt-2 border-t border-border space-y-2">
+                  <p className="text-xs text-muted-foreground">Send a test SMS to your connected Twilio number</p>
+                  <button
+                    disabled={testSmsSending || !twilio.configured}
+                    onClick={async () => {
+                      const to = smsPhone || twilio.identifier;
+                      if (!to) { toast.error('No phone number on file'); return; }
+                      setTestSmsSending(true);
+                      try {
+                        const res = await fetch('/api/sms/send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            to,
+                            message: 'Hello from MsgNexus! 📱',
+                          }),
+                        });
+                        const text = await res.text();
+                        const data = text ? JSON.parse(text) : {};
+                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                        toast.success('SMS sent!');
+                        await runSync('twilio', syncTwilioAction);
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : 'Send failed');
+                      } finally {
+                        setTestSmsSending(false);
+                      }
+                    }}
+                    className="btn btn-secondary text-sm disabled:opacity-50"
+                  >
+                    {testSmsSending ? <><Loader2 className="animate-spin" size={14} /> Sending…</> : <>📨 Send Test SMS</>}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Enter the same E.164 number as <code>TWILIO_PHONE_NUMBER</code> on the server.</p>
+                <input type="tel" value={smsPhone} onChange={(e) => setSmsPhone(e.target.value)} placeholder="+15551234567"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm" disabled={!twilio.configured} />
+                <button
+                  onClick={async () => {
+                    const r = await connectTwilioAction(smsPhone);
+                    if (r.error) toast.error(r.error);
+                    else { toast.success('SMS connected'); await reload(); await runSync('twilio', syncTwilioAction); }
+                  }}
+                  disabled={!twilio.configured}
+                  className="btn btn-primary text-sm disabled:opacity-50"
+                >
+                  Connect SMS (Twilio)
+                </button>
+              </div>
+            )}
+            {twilio.configured && (
+              <p className="text-xs text-muted-foreground">Webhook: <code className="break-all">{webhookBase}/api/webhooks/twilio</code></p>
+            )}
+          </div>
 
           <PhoneCard icon={<Send className="text-green-600" size={20} />} title="WhatsApp" hint="WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID"
             status={whatsapp} phone={waPhone} setPhone={setWaPhone}

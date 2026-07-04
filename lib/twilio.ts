@@ -7,6 +7,10 @@ export function isTwilioConfigured(): boolean {
   );
 }
 
+export function isTwilioSendConfigured(): boolean {
+  return isTwilioConfigured() && Boolean(process.env.TWILIO_PHONE_NUMBER?.trim());
+}
+
 export function getTwilioAuthHeader(): string {
   const sid = process.env.TWILIO_ACCOUNT_SID!;
   const token = process.env.TWILIO_AUTH_TOKEN!;
@@ -77,6 +81,52 @@ export async function fetchTwilioMessagesForPhone(phoneNumber: string, max = 25)
     body: m.body || '(empty SMS)',
     timestamp: m.date_sent || m.date_created || new Date().toISOString(),
   }));
+}
+
+export async function sendTwilioSms(
+  to: string,
+  message: string
+): Promise<{ sid: string; status: string; to: string; from: string }> {
+  if (!isTwilioSendConfigured()) {
+    throw new Error('Twilio send is not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.');
+  }
+
+  const normalizedTo = normalizePhoneNumber(to.trim());
+  const from = process.env.TWILIO_PHONE_NUMBER!.trim();
+  const sid = process.env.TWILIO_ACCOUNT_SID!;
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: getTwilioAuthHeader(),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      To: normalizedTo,
+      From: from,
+      Body: message,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({})) as {
+    sid?: string;
+    status?: string;
+    message?: string;
+    to?: string;
+    from?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.message || `Twilio send failed (HTTP ${res.status})`);
+  }
+
+  return {
+    sid: data.sid || '',
+    status: data.status || 'queued',
+    to: data.to || normalizedTo,
+    from: data.from || from,
+  };
 }
 
 export function normalizePhoneNumber(input: string): string {

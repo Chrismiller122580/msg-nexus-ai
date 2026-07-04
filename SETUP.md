@@ -62,6 +62,41 @@ The app will:
 - **Reset to demo data** button restores the original seeds + partial pre-parses.
 - Trash icon clears your data from the database.
 
+## Twilio SMS Setup
+
+For real inbound/outbound SMS (single-tenant — one Twilio number, one user):
+
+1. **Twilio Console** — create or buy a phone number with SMS capability.
+2. **Environment variables** in `.env.local` (or Vercel project settings):
+
+   ```
+   TWILIO_ACCOUNT_SID=AC...
+   TWILIO_AUTH_TOKEN=...
+   TWILIO_PHONE_NUMBER=+15551234567
+   TWILIO_AUTO_REPLY=false
+   ```
+
+3. **Webhook** — in Twilio Console → Phone Numbers → your number → Messaging:
+   - "A message comes in" → **Webhook** → `POST`
+   - URL: `{NEXT_PUBLIC_APP_URL}/api/webhooks/twilio`
+   - In Codespaces this URL is auto-detected; on Vercel set `NEXT_PUBLIC_APP_URL` to your production domain.
+
+4. **App** — sign in → **Settings** → SMS (Twilio):
+   - Enter the same E.164 number as `TWILIO_PHONE_NUMBER`
+   - Click **Connect SMS (Twilio)** → **Sync**
+   - Use **Send Test SMS** to verify outbound; text the Twilio number from your phone to verify inbound.
+
+5. **Public API** (optional) — create an API key with `sms:send` scope in Admin → API Keys, then:
+
+   ```bash
+   curl -X POST "$APP_URL/api/v1/sms/send" \
+     -H "Authorization: Bearer mnx_..." \
+     -H "Content-Type: application/json" \
+     -d '{"to":"+15559876543","message":"Hello from MsgNexus"}'
+   ```
+
+**Note:** With a single connected user, all inbound SMS to your Twilio number are assigned to that account. Multi-tenant routing is not supported in this setup.
+
 ## Troubleshooting
 - Port already in use? `npm run dev -- -p 3001`
 - Database errors? Verify `DATABASE_URL` and run `npm run db:push`.

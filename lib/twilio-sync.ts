@@ -2,6 +2,7 @@ import { getDb, twilioConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { fetchTwilioMessagesForPhone, isTwilioConfigured } from '@/lib/twilio';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
+import { saveSmsMessage } from '@/lib/sms-store';
 
 export async function syncTwilioForUser(
   userId: number,
@@ -22,12 +23,26 @@ export async function syncTwilioForUser(
     return { imported: 0, error: 'SMS is not connected.' };
   }
 
-  const smsMessages = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
+  const fetched = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
   await ensureConnectedAccount(userId, 'sms', conn.phoneNumber, 'Twilio SMS');
+
+  for (const m of fetched) {
+    const isOutbound = m.from === conn.phoneNumber;
+    await saveSmsMessage({
+      userId,
+      from: m.from,
+      to: isOutbound ? undefined : conn.phoneNumber,
+      body: m.body,
+      direction: isOutbound ? 'out' : 'in',
+      status: isOutbound ? 'sent' : 'received',
+      messageSid: m.externalId,
+      timestamp: new Date(m.timestamp),
+    });
+  }
 
   const imported = await ingestMessages(
     userId,
-    smsMessages.map((m) => ({
+    fetched.map((m) => ({
       externalId: m.externalId,
       platformId: 'sms' as const,
       from: m.from,
@@ -47,7 +62,15 @@ export async function syncTwilioForUser(
 
 export async function ingestTwilioWebhookMessage(
   userId: number,
-  payload: { MessageSid: string; From: string; Body: string; DateCreated?: string }
+  payload: {
+    MessageSid: string;
+    From: string;
+    To?: string;
+    Body: string;
+    DateCreated?: string;
+    direction?: 'in' | 'out';
+    status?: 'received' | 'sent' | 'queued' | 'failed';
+  }
 ): Promise<number> {
   const db = getDb();
   const [conn] = await db
@@ -60,6 +83,20 @@ export async function ingestTwilioWebhookMessage(
 
   await ensureConnectedAccount(userId, 'sms', conn.phoneNumber, 'Twilio SMS');
 
+  const direction = payload.direction ?? 'in';
+  const ts = payload.DateCreated ? new Date(payload.DateCreated) : new Date();
+
+  await saveSmsMessage({
+    userId,
+    from: payload.From,
+    to: payload.To ?? conn.phoneNumber,
+    body: payload.Body || '(empty SMS)',
+    direction,
+    status: payload.status ?? (direction === 'out' ? 'sent' : 'received'),
+    messageSid: payload.MessageSid,
+    timestamp: ts,
+  });
+
   return ingestMessages(
     userId,
     [{
@@ -67,7 +104,7 @@ export async function ingestTwilioWebhookMessage(
       platformId: 'sms',
       from: payload.From,
       body: payload.Body || '(empty SMS)',
-      timestamp: payload.DateCreated || new Date().toISOString(),
+      timestamp: payload.DateCreated || ts.toISOString(),
     }],
     'twilio'
   );

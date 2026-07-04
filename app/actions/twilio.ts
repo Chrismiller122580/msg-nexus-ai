@@ -4,6 +4,7 @@ import { getDb, twilioConnections } from '@/db';
 import { requireUser } from '@/lib/session';
 import { eq } from 'drizzle-orm';
 import { isTwilioConfigured, normalizePhoneNumber } from '@/lib/twilio';
+import { sendSmsForUser } from '@/lib/sms-send';
 import { syncTwilioForUser } from '@/lib/twilio-sync';
 import { revalidatePath } from 'next/cache';
 
@@ -75,6 +76,22 @@ export async function disconnectTwilioAction() {
   await db.delete(twilioConnections).where(eq(twilioConnections.userId, user.id));
   revalidatePath('/settings');
   return { success: true };
+}
+
+export async function sendSmsAction(
+  to: string,
+  message: string
+): Promise<{ success?: boolean; error?: string; sid?: string }> {
+  try {
+    const user = await requireUser();
+    const result = await sendSmsForUser(user.id, to, message);
+    if ('error' in result) return { error: result.error };
+    revalidatePath('/inbox');
+    return { success: true, sid: result.sid };
+  } catch (err: unknown) {
+    console.error('sendSmsAction error:', err);
+    return { error: err instanceof Error ? err.message : 'Failed to send SMS' };
+  }
 }
 
 export async function syncTwilioAction(): Promise<{ success?: boolean; error?: string; imported?: number }> {

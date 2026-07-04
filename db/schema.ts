@@ -113,6 +113,21 @@ export const messages = pgTable('messages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const smsMessages = pgTable('sms_messages', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  from: text('from').notNull(),
+  to: text('to'),
+  body: text('body').notNull(),
+  direction: text('direction').notNull().default('in'), // in | out
+  status: text('status').notNull().default('received'),
+  messageSid: text('message_sid'),
+  timestamp: timestamp('timestamp').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  uniqueMessageSid: uniqueIndex('sms_messages_message_sid_unique').on(table.messageSid),
+}));
+
 export const magicLinks = pgTable('magic_links', {
   id: serial('id').primaryKey(),
   email: text('email').notNull(),

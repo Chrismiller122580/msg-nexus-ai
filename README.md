@@ -5,7 +5,7 @@
 Phase 1 MVP — unified inbox demo with Postgres-backed persistence.
 
 ## Features
-- **Unified Inbox** — Messages from 8 simulated platforms (WhatsApp, Email, Slack, SMS, Telegram, X, Discord, iMessage) in one beautiful feed.
+- **Unified Inbox** — Messages from 8 platforms (WhatsApp, Email, Slack, SMS, Telegram, X, Discord, iMessage) in one beautiful feed. SMS via Twilio when configured; others support real OAuth/webhook connectors or simulated demo data.
 - **Smart Semantic Search** — Type natural queries like "netflix", "rent due", "amazon order", or "$15". Uses a local hybrid keyword + concept-vector engine (no external AI API keys).
 - **Local AI Parser** — One-click (or automatic) analysis that extracts:
   - Category (subscription / bill / shopping / other)

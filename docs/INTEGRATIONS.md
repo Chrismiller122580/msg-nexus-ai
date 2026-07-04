@@ -1,6 +1,6 @@
 # Top 25 + Integration Ideas
 
-> **Current status (Phase 1):** All platforms below are **simulated** with realistic seed data and the local parser. Real connectors are planned for Phase 2.
+> **Current status:** Gmail, Outlook, Twilio SMS, Slack, Discord, Telegram, WhatsApp, and X have real connector code paths (OAuth/webhook/sync) when env vars are set. iMessage remains simulated. All platforms also support demo seed data for onboarding.
 
 ## Messaging & Communication (Core)
 1. WhatsApp — Business API or WhatsApp Web bridge

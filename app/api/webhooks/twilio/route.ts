@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getDb, twilioConnections } from '@/db';
 import { validateTwilioSignature } from '@/lib/twilio';
+import { getTwilioAutoReplyMessage, twimlEmptyResponse, twimlMessageResponse } from '@/lib/twilio-twiml';
 import { ingestTwilioWebhookMessage } from '@/lib/twilio-sync';
 import { getAppUrl } from '@/lib/app-url';
+
+function twimlResponse(body: string) {
+  return new NextResponse(body, {
+    headers: { 'Content-Type': 'text/xml' },
+  });
+}
 
 export async function POST(request: Request) {
   const form = await request.formData();
@@ -24,13 +31,12 @@ export async function POST(request: Request) {
   const to = params.To;
 
   if (!messageSid || !from) {
-    return new NextResponse('<Response></Response>', {
-      headers: { 'Content-Type': 'text/xml' },
-    });
+    return twimlResponse(twimlEmptyResponse());
   }
 
   const db = getDb();
   const connections = await db.select().from(twilioConnections);
+  let ingested = false;
 
   for (const conn of connections) {
     const matchesUser =
@@ -43,13 +49,20 @@ export async function POST(request: Request) {
     await ingestTwilioWebhookMessage(conn.userId, {
       MessageSid: messageSid,
       From: from,
+      To: to,
       Body: body || '',
       DateCreated: params.DateCreated,
+      direction: 'in',
+      status: 'received',
     });
+    ingested = true;
     break;
   }
 
-  return new NextResponse('<Response></Response>', {
-    headers: { 'Content-Type': 'text/xml' },
-  });
+  const autoReply = getTwilioAutoReplyMessage();
+  if (ingested && autoReply) {
+    return twimlResponse(twimlMessageResponse(autoReply));
+  }
+
+  return twimlResponse(twimlEmptyResponse());
 }

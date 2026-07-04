@@ -12,7 +12,7 @@ import {
 type KeyRow = Awaited<ReturnType<typeof listAdminApiKeys>>[number];
 type UserOption = { id: number; email: string };
 
-const SCOPES = ['messages:read', 'messages:write', 'connections:read', 'admin:read'];
+const SCOPES = ['messages:read', 'messages:write', 'sms:send', 'connections:read', 'admin:read'];
 
 export function AdminApiClient({
   initialKeys,
