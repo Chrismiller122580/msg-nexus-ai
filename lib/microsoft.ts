@@ -117,12 +117,44 @@ interface GraphMessage {
   receivedDateTime?: string;
   subject?: string;
   bodyPreview?: string;
+  body?: { contentType?: string; content?: string };
   from?: { emailAddress?: { name?: string; address?: string } };
 }
 
-export async function fetchRecentOutlookMessages(accessToken: string, max = 20) {
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractOutlookBody(msg: GraphMessage): string {
+  const raw = msg.body?.content?.trim();
+  if (raw) {
+    const text = msg.body?.contentType === 'html' ? stripHtml(raw) : raw;
+    if (text) return text.slice(0, 4000);
+  }
+  return (msg.bodyPreview || msg.subject || '(empty message)').slice(0, 4000);
+}
+
+export async function fetchRecentOutlookMessages(
+  accessToken: string,
+  max = 50,
+  since?: Date | null
+) {
+  const params = new URLSearchParams({
+    $top: String(max),
+    $orderby: 'receivedDateTime desc',
+    $select: 'id,subject,bodyPreview,body,from,receivedDateTime',
+  });
+  if (since) {
+    params.set('$filter', `receivedDateTime ge ${since.toISOString()}`);
+  }
+
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/messages?$top=${max}&$orderby=receivedDateTime desc&$select=id,subject,bodyPreview,from,receivedDateTime`,
+    `https://graph.microsoft.com/v1.0/me/messages?${params}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (!res.ok) throw new Error('Failed to list Outlook messages');
@@ -138,7 +170,7 @@ export async function fetchRecentOutlookMessages(accessToken: string, max = 20) 
       externalId: msg.id,
       from,
       subject: msg.subject,
-      body: (msg.bodyPreview || msg.subject || '(empty message)').slice(0, 4000),
+      body: extractOutlookBody(msg),
       timestamp: msg.receivedDateTime || new Date().toISOString(),
     };
   });

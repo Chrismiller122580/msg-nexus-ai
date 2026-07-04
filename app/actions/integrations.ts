@@ -8,7 +8,7 @@ export async function syncAllIntegrationsAction(): Promise<{
   success?: boolean;
   error?: string;
   totalImported?: number;
-  details?: Record<string, { imported: number; error?: string }>;
+  details?: Record<string, { imported: number; error?: string; info?: string }>;
 }> {
   try {
     const user = await requireUser();

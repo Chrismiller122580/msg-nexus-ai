@@ -113,12 +113,13 @@ export default function SettingsClient() {
     if (searchParams.get('billing') === 'cancelled') toast.info('Checkout cancelled');
   }, [searchParams]);
 
-  async function runSync(key: string, fn: () => Promise<{ error?: string; imported?: number }>) {
+  async function runSync(key: string, fn: () => Promise<{ error?: string; info?: string; imported?: number }>) {
     setSyncing((s) => ({ ...s, [key]: true }));
     try {
       const r = await fn();
       if (r.error) toast.error(r.error);
-      else toast.success(`Imported ${r.imported ?? 0} messages`);
+      else if (r.info && (r.imported ?? 0) === 0) toast.info(r.info);
+      else toast.success(`Imported ${r.imported ?? 0} messages${r.info ? ` — ${r.info}` : ''}`);
       await reload();
     } finally {
       setSyncing((s) => ({ ...s, [key]: false }));
@@ -158,7 +159,21 @@ export default function SettingsClient() {
             try {
               const r = await syncAllIntegrationsAction();
               if (r.error) toast.error(r.error);
-              else toast.success(`Synced all — ${r.totalImported ?? 0} new messages`);
+              else {
+                const lines = r.details
+                  ? Object.entries(r.details)
+                      .filter(([, v]) => (v.imported ?? 0) > 0 || v.error || v.info)
+                      .map(([k, v]) => {
+                        if (v.error) return `${k}: ${v.error}`;
+                        if (v.info && !v.imported) return `${k}: ${v.info}`;
+                        return `${k}: +${v.imported}`;
+                      })
+                  : [];
+                toast.success(
+                  `Synced all — ${r.totalImported ?? 0} new messages`,
+                  lines.length ? { description: lines.join(' · ') } : undefined
+                );
+              }
               await reload();
             } finally { setSyncingAll(false); }
           }} disabled={syncingAll} className="btn btn-primary text-sm disabled:opacity-70">

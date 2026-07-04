@@ -9,6 +9,8 @@
     "lint": "eslint",
     "db:push": "drizzle-kit push --force",
     "db:status": "node scripts/db-status.mjs",
+    "db:local:up": "docker compose up -d postgres",
+    "db:local:down": "docker compose down",
     "db:neon:setup": "node scripts/setup-neon.mjs",
     "db:neon:bootstrap": "node scripts/bootstrap-neon.mjs",
     "vercel:env:pull": "npx vercel env pull .env.local",

@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Message, Insight, PlatformId, Category, RankedMessage } from '../../lib/types';
 import { PLATFORMS, getPlatform } from '../../lib/platforms';
+import { getMessageBadge } from '../../lib/message-display';
 import { createSeedMessages } from '../../lib/seed-data';
 import { parseMessage } from '../../lib/ai-parser';
 import { searchMessages, getTopInsights } from '../../lib/semantic-search';
@@ -811,7 +812,7 @@ export default function InboxClient() {
                   )}
 
                   {ranked.map(({ message, score, insight }) => {
-                    const plat = getPlatform(message.platformId);
+                    const badge = getMessageBadge(message);
                     const isActive = selectedMessageId === message.id;
                     const preview = message.body.length > 140 ? message.body.slice(0, 137) + '...' : message.body;
 
@@ -822,8 +823,8 @@ export default function InboxClient() {
                         className={cn('message-card', isActive && 'active')}
                       >
                         <div className="flex items-start gap-3">
-                          <div className="platform-badge text-white shrink-0 mt-0.5" style={{ backgroundColor: plat.color }}>
-                            {plat.name}
+                          <div className="platform-badge text-white shrink-0 mt-0.5" style={{ backgroundColor: badge.color }}>
+                            {badge.name}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -915,9 +916,14 @@ export default function InboxClient() {
               <>
                 <div className="flex justify-between">
                   <div>
-                    <div className="platform-badge text-white inline-block" style={{ backgroundColor: getPlatform(selectedMessage.platformId).color }}>
-                      {getPlatform(selectedMessage.platformId).name}
-                    </div>
+                    {(() => {
+                      const badge = getMessageBadge(selectedMessage);
+                      return (
+                        <div className="platform-badge text-white inline-block" style={{ backgroundColor: badge.color }}>
+                          {badge.name}
+                        </div>
+                      );
+                    })()}
                     <div className="font-semibold text-lg mt-1">{selectedMessage.from}</div>
                   </div>
                   <button onClick={() => setSelectedMessageId(null)}><X size={18} /></button>

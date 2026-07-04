@@ -26,8 +26,8 @@ export async function syncWhatsAppForUser(userId: number, limit = 25) {
   await db.update(whatsappConnections).set({ lastSyncedAt: new Date() }).where(eq(whatsappConnections.userId, userId));
   return {
     imported,
-    error: imported === 0
-      ? 'WhatsApp Cloud API is webhook-only — new messages arrive at /api/webhooks/whatsapp automatically.'
+    info: imported === 0
+      ? 'WhatsApp is webhook-only — new messages arrive automatically at /api/webhooks/whatsapp.'
       : undefined,
   };
 }

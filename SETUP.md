@@ -3,7 +3,19 @@
 ## Requirements
 - Node.js 18+ (tested on 24)
 - npm (or pnpm/yarn)
-- Neon Postgres `DATABASE_URL` (for full functionality)
+- Postgres `DATABASE_URL` — Neon (cloud) or local Docker (see below)
+
+## Local Postgres (Docker)
+
+```bash
+npm run db:local:up
+# In .env.local:
+# DATABASE_URL="postgresql://codespace:codespace@127.0.0.1:5433/msgnexus"
+npm run db:push
+npm run dev
+```
+
+Stop with `npm run db:local:down`.
 
 ## GitHub Codespaces
 

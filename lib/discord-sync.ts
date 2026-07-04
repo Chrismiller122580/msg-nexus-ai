@@ -2,8 +2,9 @@ import { getDb, discordConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { fetchRecentDiscordMessages, getValidDiscordToken } from '@/lib/discord';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
+import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 
-export async function syncDiscordForUser(userId: number, limit = 25) {
+export async function syncDiscordForUser(userId: number, limit = SYNC_BATCH_SIZE) {
   const token = await getValidDiscordToken(userId);
   if (!token) return { imported: 0, error: 'Discord is not connected.' };
 

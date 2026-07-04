@@ -3,10 +3,11 @@ import { eq } from 'drizzle-orm';
 import { fetchTwilioMessagesForPhone, isTwilioConfigured } from '@/lib/twilio';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { saveSmsMessage } from '@/lib/sms-store';
+import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 
 export async function syncTwilioForUser(
   userId: number,
-  limit = 25
+  limit = SYNC_BATCH_SIZE
 ): Promise<{ imported: number; error?: string }> {
   if (!isTwilioConfigured()) {
     return { imported: 0, error: 'Twilio is not configured on the server.' };

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: codespace
+      POSTGRES_PASSWORD: codespace
+      POSTGRES_DB: msgnexus
+    volumes:
+      - msgnexus_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codespace -d msgnexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  msgnexus_pg:

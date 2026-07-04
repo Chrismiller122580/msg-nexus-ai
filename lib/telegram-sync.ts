@@ -2,8 +2,9 @@ import { getDb, telegramConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { fetchTelegramUpdatesForChat } from '@/lib/telegram';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
+import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 
-export async function syncTelegramForUser(userId: number, limit = 25) {
+export async function syncTelegramForUser(userId: number, limit = SYNC_BATCH_SIZE) {
   const db = getDb();
   const [conn] = await db.select().from(telegramConnections).where(eq(telegramConnections.userId, userId)).limit(1);
 
@@ -21,7 +22,12 @@ export async function syncTelegramForUser(userId: number, limit = 25) {
   );
 
   await db.update(telegramConnections).set({ lastSyncedAt: new Date() }).where(eq(telegramConnections.userId, userId));
-  return { imported };
+  return {
+    imported,
+    info: imported === 0
+      ? 'Telegram uses webhooks — new messages arrive at /api/webhooks/telegram after linking.'
+      : undefined,
+  };
 }
 
 export async function ingestTelegramWebhookMessage(

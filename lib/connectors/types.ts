@@ -12,6 +12,7 @@ export interface FetchedMessage {
 export interface SyncResult {
   imported: number;
   error?: string;
+  info?: string;
 }
 
 export interface ConnectorStatus {

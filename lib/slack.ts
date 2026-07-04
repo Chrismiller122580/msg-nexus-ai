@@ -96,18 +96,31 @@ interface SlackMessage {
   user?: string;
 }
 
-export async function fetchRecentSlackMessages(accessToken: string, max = 20) {
-  const channelsRes = await fetch('https://slack.com/api/conversations.list?types=im&limit=5', {
+async function resolveSlackUserName(accessToken: string, userId: string): Promise<string> {
+  const res = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json() as {
+    ok: boolean;
+    user?: { real_name?: string; name?: string; profile?: { display_name?: string } };
+  };
+  if (!data.ok || !data.user) return `Slack user ${userId}`;
+  return data.user.profile?.display_name || data.user.real_name || data.user.name || `Slack user ${userId}`;
+}
+
+export async function fetchRecentSlackMessages(accessToken: string, max = 50) {
+  const channelsRes = await fetch('https://slack.com/api/conversations.list?types=im&limit=8', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const channelsData = await channelsRes.json() as { ok: boolean; channels?: Array<{ id: string }> };
   if (!channelsData.ok || !channelsData.channels?.length) return [];
 
   const results: Array<{ externalId: string; from: string; body: string; timestamp: string }> = [];
+  const userNameCache = new Map<string, string>();
 
-  for (const ch of channelsData.channels.slice(0, 3)) {
+  for (const ch of channelsData.channels.slice(0, 5)) {
     const histRes = await fetch(
-      `https://slack.com/api/conversations.history?channel=${ch.id}&limit=${Math.ceil(max / 3)}`,
+      `https://slack.com/api/conversations.history?channel=${ch.id}&limit=${Math.ceil(max / 5)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     const hist = await histRes.json() as { ok: boolean; messages?: SlackMessage[] };
@@ -115,9 +128,16 @@ export async function fetchRecentSlackMessages(accessToken: string, max = 20) {
 
     for (const m of hist.messages) {
       if (!m.text) continue;
+      let from = 'Slack';
+      if (m.user) {
+        if (!userNameCache.has(m.user)) {
+          userNameCache.set(m.user, await resolveSlackUserName(accessToken, m.user));
+        }
+        from = userNameCache.get(m.user)!;
+      }
       results.push({
         externalId: `${ch.id}-${m.ts}`,
-        from: m.user ? `Slack user ${m.user}` : 'Slack',
+        from,
         body: m.text,
         timestamp: new Date(Number(m.ts) * 1000).toISOString(),
       });

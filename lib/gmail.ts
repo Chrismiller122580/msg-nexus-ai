@@ -130,9 +130,23 @@ function extractBody(payload: GmailMessagePayload['payload']): string {
   return '';
 }
 
-export async function fetchRecentGmailMessages(accessToken: string, max = 20) {
+function formatGmailAfter(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `after:${y}/${m}/${d}`;
+}
+
+export async function fetchRecentGmailMessages(
+  accessToken: string,
+  max = 50,
+  since?: Date | null
+) {
+  const params = new URLSearchParams({ maxResults: String(max) });
+  if (since) params.set('q', formatGmailAfter(since));
+
   const listRes = await fetch(
-    `https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}`,
+    `https://www.googleapis.com/gmail/v1/users/me/messages?${params}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (!listRes.ok) throw new Error('Failed to list Gmail messages');

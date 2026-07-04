@@ -1,9 +1,10 @@
 import { getDb, slackConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { fetchRecentSlackMessages, getValidSlackToken } from '@/lib/slack';
+import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 
-export async function syncSlackForUser(userId: number, limit = 25) {
+export async function syncSlackForUser(userId: number, limit = SYNC_BATCH_SIZE) {
   const token = await getValidSlackToken(userId);
   if (!token) return { imported: 0, error: 'Slack is not connected.' };
 

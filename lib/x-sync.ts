@@ -2,8 +2,9 @@ import { getDb, xConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { fetchRecentXDMs, getValidXToken } from '@/lib/x-api';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
+import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 
-export async function syncXForUser(userId: number, limit = 25) {
+export async function syncXForUser(userId: number, limit = SYNC_BATCH_SIZE) {
   const token = await getValidXToken(userId);
   if (!token) return { imported: 0, error: 'X is not connected.' };
 
