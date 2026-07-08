@@ -48,7 +48,12 @@ function upsertEnvLocal(updates) {
 
 if (fromVercel) {
   const pulled = loadEnvFile(resolve(process.cwd(), '.env.local'));
-  neonUrl = pulled.DATABASE_URL || pulled.NEON_DATABASE_URL || pulled.POSTGRES_URL;
+  neonUrl =
+    pulled.DATABASE_URL ||
+    pulled.POSTGRES_URL ||
+    pulled.POSTGRES_URL_NON_POOLING ||
+    pulled.POSTGRES_URL_NO_SSL ||
+    pulled.NEON_DATABASE_URL;
   if (!neonUrl?.includes('neon.tech')) {
     console.error('\n❌ No Neon DATABASE_URL in .env.local');
     console.error('   Run: npx vercel login && npx vercel link && npx vercel env pull .env.local\n');

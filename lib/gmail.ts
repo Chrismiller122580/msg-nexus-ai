@@ -1,6 +1,7 @@
 import { getDb, gmailConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getAppUrl } from '@/lib/app-url';
+import { getGoogleClientSecret, isGoogleOAuthConfigured } from '@/lib/google-oauth';
 
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -8,7 +9,7 @@ const GMAIL_SCOPES = [
 ].join(' ');
 
 export function isGmailConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  return isGoogleOAuthConfigured();
 }
 
 export function getGmailAuthUrl(state: string): string {
@@ -33,7 +34,7 @@ export async function exchangeGmailCode(code: string) {
     body: new URLSearchParams({
       code,
       client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_secret: getGoogleClientSecret()!,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
     }),
@@ -64,7 +65,7 @@ async function refreshAccessToken(refreshToken: string) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      client_secret: getGoogleClientSecret()!,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
     }),
