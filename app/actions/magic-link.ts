@@ -3,8 +3,9 @@
 import { getDb, magicLinks } from '@/db';
 import { getAppUrl } from '@/lib/app-url';
 import { getDbErrorMessage } from '@/lib/db-error';
-import { generateId } from '@/lib/utils';
 import { isDevMagicLinkAllowed } from '@/lib/env';
+import { sendMagicLinkEmail } from '@/lib/resend';
+import { generateId } from '@/lib/utils';
 import { verifyMagicLinkToken } from '@/lib/verify-magic-link';
 
 export async function requestMagicLinkAction(email: string): Promise<{
@@ -30,26 +31,11 @@ export async function requestMagicLinkAction(email: string): Promise<{
 
     const link = `${getAppUrl()}/auth/verify?token=${token}`;
 
-    if (process.env.RESEND_API_KEY) {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: process.env.RESEND_FROM_EMAIL || 'MsgNexus.AI <onboarding@resend.dev>',
-          to: normalizedEmail,
-          subject: 'Sign in to MsgNexus.AI',
-          html: `<p>Click to sign in (expires in 15 minutes):</p><p><a href="${link}">${link}</a></p>`,
-        }),
-      });
-
-      if (!res.ok) {
-        console.error('Resend error:', await res.text());
-        return { error: 'Failed to send sign-in email. Please try again in a few minutes.' };
+    if (process.env.RESEND_API_KEY?.trim()) {
+      const sent = await sendMagicLinkEmail(normalizedEmail, link);
+      if (!sent.ok) {
+        return { error: sent.error || 'Failed to send sign-in email. Please try again.' };
       }
-
       return { success: true };
     }
 
