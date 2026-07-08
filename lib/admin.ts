@@ -9,8 +9,14 @@ import {
 } from '@/lib/permissions';
 
 export function getAdminEmails(): string[] {
-  const raw = process.env.ADMIN_EMAILS || 'demo@msgnexus.ai';
-  return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const raw = process.env.ADMIN_EMAILS?.trim();
+  if (raw) {
+    return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  }
+  if (process.env.NODE_ENV === 'development') {
+    return ['demo@msgnexus.ai'];
+  }
+  return [];
 }
 
 export function isAdminEmail(email: string): boolean {

@@ -126,12 +126,12 @@ export async function listAdminConnections() {
     });
   }
 
-  const simulated = await db.select().from(connectedAccounts);
-  for (const row of simulated) {
+  const manualAccounts = await db.select().from(connectedAccounts);
+  for (const row of manualAccounts) {
     results.push({
       userId: row.userId,
       email: userEmail(row.userId),
-      platform: `Simulated (${row.platformId})`,
+      platform: `Manual (${row.platformId})`,
       identifier: row.identifier,
       connectedAt: row.connectedAt.toISOString(),
     });

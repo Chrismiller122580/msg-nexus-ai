@@ -4,6 +4,7 @@ import { getDb, magicLinks } from '@/db';
 import { getAppUrl } from '@/lib/app-url';
 import { getDbErrorMessage } from '@/lib/db-error';
 import { generateId } from '@/lib/utils';
+import { isDevMagicLinkAllowed } from '@/lib/env';
 import { verifyMagicLinkToken } from '@/lib/verify-magic-link';
 
 export async function requestMagicLinkAction(email: string): Promise<{
@@ -46,18 +47,18 @@ export async function requestMagicLinkAction(email: string): Promise<{
 
       if (!res.ok) {
         console.error('Resend error:', await res.text());
-        return { error: 'Failed to send email. Try demo login instead.' };
+        return { error: 'Failed to send sign-in email. Please try again in a few minutes.' };
       }
 
       return { success: true };
     }
 
-    if (process.env.NODE_ENV === 'development') {
+    if (isDevMagicLinkAllowed()) {
       return { success: true, devLink: link };
     }
 
     return {
-      error: 'Email sending is not configured. Set RESEND_API_KEY or use demo login.',
+      error: 'Email sign-in is not configured. Contact support or try again later.',
     };
   } catch (err: unknown) {
     console.error('requestMagicLinkAction error:', err);

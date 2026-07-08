@@ -52,7 +52,7 @@ export function AdminConnectionsClient({ initialConnections }: { initialConnecti
                 <td className="p-3 text-xs text-muted-foreground">{new Date(c.connectedAt).toLocaleString()}</td>
                 <td className="p-3 text-xs text-muted-foreground">{c.lastSyncedAt ? new Date(c.lastSyncedAt).toLocaleString() : '—'}</td>
                 <td className="p-3">
-                  {!c.platform.startsWith('Simulated') && (
+                  {!c.platform.startsWith('Manual') && (
                     <button
                       onClick={() => syncUser(c.userId)}
                       disabled={syncing === c.userId}

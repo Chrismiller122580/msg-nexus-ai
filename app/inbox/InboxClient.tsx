@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Search, Plus, RefreshCw, Download, Upload, Trash2, X, Play, BarChart3,
+  Search, RefreshCw, Download, Trash2, X, Play, BarChart3,
   Inbox, Calendar, DollarSign, Users, Filter, LogOut, Settings, Mail, Loader2, Shield
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,14 +12,13 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { Message, Insight, PlatformId, Category, RankedMessage } from '../../lib/types';
 import { PLATFORMS, getPlatform } from '../../lib/platforms';
 import { getMessageBadge } from '../../lib/message-display';
-import { createSeedMessages } from '../../lib/seed-data';
 import { parseMessage } from '../../lib/ai-parser';
 import { searchMessages, getTopInsights } from '../../lib/semantic-search';
-import { generateId, formatRelativeTime, formatCurrency, cn, downloadJson } from '../../lib/utils';
+import { formatRelativeTime, formatCurrency, cn, downloadJson } from '../../lib/utils';
 import { logoutAction } from '../actions/auth';
 import {
-  getUserMessages, saveMessage as saveMessageAction, saveInsight,
-  deleteUserMessage, resetUserData, importUserMessages,
+  getUserMessages, saveInsight,
+  deleteUserMessage, resetUserData,
 } from '../actions/messages';
 import { getConnectedAccounts } from '../actions/onboarding';
 import { getCurrentUserAction } from '../actions/user';
@@ -121,8 +120,7 @@ export default function InboxClient() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [view, setView] = useState<ViewMode>('inbox');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
+
 
   useEffect(() => {
     const gmailParam = searchParams.get('gmail');
@@ -139,25 +137,8 @@ export default function InboxClient() {
       setDataState('loading');
       try {
         const data = await getUserMessages();
-        if (data.messages.length > 0) {
-          setMessages(data.messages);
-          setInsights(data.insights);
-          return;
-        }
-
-        const seeds = createSeedMessages().slice(0, 12);
-        const pre: Record<string, Insight> = {};
-
-        for (const m of seeds) {
-          const ins = parseMessage(m.body, m.from);
-          ins.messageId = m.id;
-          await saveMessageAction({ ...m });
-          await saveInsight(ins);
-          pre[m.id] = ins;
-        }
-
-        setMessages(seeds);
-        setInsights(pre);
+        setMessages(data.messages);
+        setInsights(data.insights);
       } catch (e) {
         console.error('Failed to load from DB', e);
         toast.error('Failed to load messages', {
@@ -176,25 +157,17 @@ export default function InboxClient() {
       const tag = (e.target as HTMLElement)?.tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
-      if (e.key === '/' && !typing && !isAddOpen) {
+      if (e.key === '/' && !typing) {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
       if (e.key === 'Escape') {
-        if (isAddOpen) setIsAddOpen(false);
-        else setSelectedMessageId(null);
+        setSelectedMessageId(null);
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isAddOpen]);
-
-  // Add message form
-  const [addForm, setAddForm] = useState({
-    platformId: (availablePlatforms[0]?.id || 'whatsapp') as PlatformId,
-    from: '',
-    body: '',
-  });
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(searchQuery), 180);
@@ -342,108 +315,10 @@ export default function InboxClient() {
     if (!insights[id]) setTimeout(() => runParse(id), 60);
   }
 
-  function openAdd() {
-    const defaultPlat = availablePlatforms[0]?.id || 'whatsapp';
-    setAddForm({ platformId: defaultPlat, from: '', body: '' });
-    setIsAddOpen(true);
-  }
-
-  async function submitAddMessage() {
-    const { platformId, from, body } = addForm;
-    if (!body.trim()) {
-      toast.error('Message body is required');
-      return;
-    }
-    const id = generateId();
-    const newMsg: Message = {
-      id,
-      platformId,
-      timestamp: new Date().toISOString(),
-      from: from.trim() || 'Unknown',
-      body: body.trim(),
-    };
-
-    await saveMessageAction(newMsg);
-    setMessages(prev => [newMsg, ...prev]);
-    setIsAddOpen(false);
-    setAddForm({ platformId: (availablePlatforms[0]?.id || 'whatsapp') as PlatformId, from: '', body: '' });
-
-    const ins = parseMessage(newMsg.body, newMsg.from);
-    ins.messageId = id;
-    await saveInsight(ins);
-
-    setSelectedMessageId(id);
-    setInsights(prev => ({ ...prev, [id]: ins }));
-    toast.success('New message added & analyzed', { description: ins.summary });
-  }
-
-  async function resetToSeeds() {
-    await resetUserData();
-
-    // Re-seed fresh demo data
-    const seeds = createSeedMessages().slice(0, 12);
-    const pre: Record<string, Insight> = {};
-
-    for (const m of seeds) {
-      const ins = parseMessage(m.body, m.from);
-      ins.messageId = m.id;
-      await saveMessageAction(m);
-      await saveInsight(ins);
-      pre[m.id] = ins;
-    }
-
-    setMessages(seeds);
-    setInsights(pre);
-    setSelectedMessageId(null);
-    setSearchQuery('');
-    setFilters(defaultFilters);
-    toast.success('Reset to demo data');
-  }
-
   function exportData() {
     const payload = { messages, insights, exportedAt: new Date().toISOString() };
     downloadJson('msgnexus-export.json', payload);
     toast.success('Exported');
-  }
-
-  function importData(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const data = JSON.parse(String(ev.target?.result || '{}'));
-        if (!Array.isArray(data.messages)) throw new Error('Invalid file format');
-
-        const result = await importUserMessages({
-          messages: data.messages,
-          insights: data.insights,
-        });
-
-        if (result.error) throw new Error(result.error);
-
-        const refreshed = await getUserMessages();
-        setMessages(refreshed.messages);
-        setInsights(refreshed.insights);
-        setSelectedMessageId(null);
-
-        const detail =
-          result.skipped > 0
-            ? `${result.skipped} duplicate${result.skipped === 1 ? '' : 's'} skipped`
-            : undefined;
-        toast.success(`Imported ${result.imported} message${result.imported === 1 ? '' : 's'}`, {
-          description: detail,
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Bad file';
-        toast.error('Import failed', { description: message });
-      } finally {
-        setIsImporting(false);
-        e.target.value = '';
-      }
-    };
-    reader.readAsText(file);
   }
 
   async function handleGmailSync() {
@@ -504,9 +379,7 @@ export default function InboxClient() {
         <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <MsgNexusLogo href="/inbox" />
-            <div className="text-xs px-2 py-0.5 rounded-full border border-border text-muted-foreground hidden md:block">
-              Phase 1 • Local AI
-            </div>
+
           </div>
 
           <div className="flex items-center gap-2 text-sm">
@@ -567,7 +440,7 @@ export default function InboxClient() {
         <div className="bg-muted border-b border-border text-sm px-6 py-2 flex items-center justify-between max-w-[1400px] mx-auto w-full">
           <div>
             Showing messages from <span className="font-medium">{connectedAccounts.length}</span> connected account{connectedAccounts.length !== 1 ? 's' : ''}
-            <Link href="/onboarding" className="ml-2 underline">Manage accounts</Link>
+            <Link href="/settings" className="ml-2 underline">Connect integrations</Link>
           </div>
         </div>
       )}
@@ -619,22 +492,12 @@ export default function InboxClient() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={openAdd} className="btn btn-primary text-sm">
-            <Plus size={16} /> Add message
-          </button>
           <button onClick={runParseAllUnparsed} className="btn btn-secondary text-sm" disabled={unparsedCount === 0}>
             <Play size={16} /> Analyze
           </button>
-          <button onClick={resetToSeeds} className="btn btn-ghost" title="Reset demo data">
-            <RefreshCw size={16} />
-          </button>
-          <button onClick={exportData} className="btn btn-ghost" title="Export">
+          <button onClick={exportData} className="btn btn-ghost" title="Export your data">
             <Download size={16} />
           </button>
-          <label className="btn btn-ghost cursor-pointer" title="Import">
-            <Upload size={16} />
-            <input type="file" accept=".json" className="hidden" onChange={importData} disabled={isImporting} />
-          </label>
           <button onClick={async () => {
             if (confirm('Clear all your data? This cannot be undone.')) {
               await resetUserData();
@@ -742,7 +605,7 @@ export default function InboxClient() {
               )}
             </div>
             {connectedAccounts.length > 0 && (
-              <Link href="/onboarding" className="text-xs block mt-3 text-accent hover:underline">+ Manage connected accounts</Link>
+              <Link href="/settings" className="text-xs block mt-3 text-accent hover:underline">+ Manage integrations</Link>
             )}
           </div>
 
@@ -783,23 +646,18 @@ export default function InboxClient() {
                           <Inbox size={40} className="mx-auto opacity-40" />
                           <div className="font-medium text-foreground">Your inbox is empty</div>
                           <p className="text-sm max-w-sm mx-auto">
-                            Connect Gmail for real emails, add a message manually, or wait for demo data to load.
+                            Connect your messaging apps in Settings, then sync to pull in messages.
                           </p>
                           <div className="flex flex-wrap justify-center gap-2">
-                            {gmailStatus.configured && !gmailStatus.connected && (
-                              <Link href="/settings" className="btn btn-primary text-sm">
-                                <Mail size={15} /> Connect Gmail
-                              </Link>
-                            )}
+                            <Link href="/settings" className="btn btn-primary text-sm">
+                              <Settings size={15} /> Connect apps
+                            </Link>
                             {gmailStatus.connected && (
-                              <button onClick={handleGmailSync} disabled={syncingGmail} className="btn btn-primary text-sm">
+                              <button onClick={handleGmailSync} disabled={syncingGmail} className="btn btn-secondary text-sm">
                                 {syncingGmail ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
                                 Sync Gmail
                               </button>
                             )}
-                            <button onClick={openAdd} className="btn btn-secondary text-sm">
-                              <Plus size={15} /> Add message
-                            </button>
                           </div>
                         </div>
                       ) : (
@@ -1006,25 +864,6 @@ export default function InboxClient() {
         </div>
       </div>
 
-      {/* Add modal (simplified) */}
-      {isAddOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-6" onClick={() => setIsAddOpen(false)}>
-          <div className="card w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
-            <div className="font-semibold text-lg mb-1">Add simulated message</div>
-            <div className="space-y-4 mt-4">
-              <select value={addForm.platformId} onChange={e => setAddForm(f => ({...f, platformId: e.target.value as PlatformId}))} className="w-full bg-input border border-input-border rounded-2xl px-3 py-2 text-sm">
-                {availablePlatforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <input value={addForm.from} onChange={e => setAddForm(f => ({...f, from: e.target.value}))} placeholder="From" className="w-full bg-input border border-input-border rounded-2xl px-3 py-2 text-sm" />
-              <textarea value={addForm.body} onChange={e => setAddForm(f => ({...f, body: e.target.value}))} rows={4} placeholder="Message content..." className="w-full bg-input border border-input-border rounded-2xl px-3 py-2 text-sm font-mono" />
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setIsAddOpen(false)} className="btn btn-secondary flex-1">Cancel</button>
-              <button onClick={submitAddMessage} className="btn btn-primary flex-1">Add &amp; Analyze</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

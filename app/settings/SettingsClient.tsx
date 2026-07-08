@@ -149,10 +149,19 @@ export default function SettingsClient() {
           <ArrowLeft size={16} /> Back to inbox
         </Link>
 
+        {searchParams.get('welcome') === '1' && (
+          <div className="card p-5 mb-8 border-accent/30 bg-accent/5">
+            <h2 className="font-semibold mb-1">Welcome to MsgNexus</h2>
+            <p className="text-sm text-muted-foreground">
+              Connect the apps you use below. Once connected, sync to pull messages into your unified inbox.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight mb-2">Integrations</h1>
-            <p className="text-muted-foreground">Connect all 8 platforms · {userEmail}</p>
+            <p className="text-muted-foreground">Connect your messaging apps · {userEmail}</p>
           </div>
           <button onClick={async () => {
             setSyncingAll(true);
@@ -369,14 +378,8 @@ export default function SettingsClient() {
 
           <div className="card p-6 border-dashed opacity-70">
             <h2 className="font-semibold mb-1">iMessage</h2>
-            <p className="text-sm text-muted-foreground">No public API. Requires a Mac relay (BlueBubbles / AirMessage). Use simulated messages in onboarding for now.</p>
+            <p className="text-sm text-muted-foreground">Coming soon — requires a Mac relay (BlueBubbles / AirMessage).</p>
           </div>
-        </div>
-
-        <div className="mt-6">
-          <Link href="/onboarding" className="text-sm text-muted-foreground hover:text-foreground underline">
-            Manage simulated platform connections
-          </Link>
         </div>
       </div>
     </div>

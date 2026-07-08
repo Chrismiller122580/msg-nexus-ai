@@ -1,4 +1,4 @@
-import { getDb, users, connectedAccounts, gmailConnections, subscriptions } from '@/db';
+import { getDb, users, subscriptions } from '@/db';
 import { eq } from 'drizzle-orm';
 import { createSession } from '@/lib/session';
 import { ensureAdminRole } from '@/lib/admin';
@@ -67,21 +67,8 @@ export async function loginUser(email: string) {
   const user = await findOrCreateUser(email);
   await createSession(user.id);
 
-  const db = getDb();
-  const [connected] = await db
-    .select({ id: connectedAccounts.id })
-    .from(connectedAccounts)
-    .where(eq(connectedAccounts.userId, user.id))
-    .limit(1);
-
-  const [gmail] = await db
-    .select({ id: gmailConnections.id })
-    .from(gmailConnections)
-    .where(eq(gmailConnections.userId, user.id))
-    .limit(1);
-
   return {
     user: { email: user.email, name: user.name || undefined },
-    onboarded: Boolean(connected || gmail),
+    onboarded: true,
   };
 }

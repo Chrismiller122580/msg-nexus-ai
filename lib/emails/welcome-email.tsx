@@ -32,12 +32,12 @@ export function WelcomeEmail({ name, appUrl }: WelcomeEmailProps) {
             spots bills, subscriptions, and shopping automatically.
           </Text>
           <Section style={buttonSection}>
-            <Button style={button} href={`${appUrl}/onboarding`}>
+            <Button style={button} href={`${appUrl}/settings?welcome=1`}>
               Connect your platforms
             </Button>
           </Section>
           <Text style={paragraph}>
-            Or jump straight to your inbox and explore with demo data.
+            Connect Gmail, SMS, Slack, and more to start syncing messages into your inbox.
           </Text>
           <Button style={buttonSecondary} href={`${appUrl}/inbox`}>
             Open inbox

@@ -50,17 +50,10 @@ async function main() {
   const login = await call('login', 'loginAction', [email, 'demo']);
   results.push({ step: 'login', ok: login.status === 200 && jar.has('msgnexus-session') });
 
-  await fetch(`${BASE}/onboarding`, {
+  const settings = await fetch(`${BASE}/settings`, {
     headers: { Cookie: `msgnexus-session=${jar.get('msgnexus-session')}` },
   });
-
-  const onboard = await call('onboarding', 'saveConnectedAccounts', [
-    [
-      { platformId: 'email', identifier: 'test@gmail.com' },
-      { platformId: 'whatsapp', identifier: '+15551234567' },
-    ],
-  ]);
-  results.push({ step: 'onboarding', ok: onboard.status === 200 });
+  results.push({ step: 'settings', ok: settings.status === 200 });
 
   const user = await call('inbox', 'getCurrentUserAction', []);
   results.push({ step: 'getCurrentUser', ok: user.status === 200 && user.text.includes(email) });

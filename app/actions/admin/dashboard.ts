@@ -55,7 +55,7 @@ export async function getAdminDashboardStats() {
     db.select({ count: count() }).from(connectedAccounts),
   ]);
 
-  const platformLabels = ['Gmail', 'Outlook', 'SMS', 'Slack', 'Discord', 'Telegram', 'WhatsApp', 'X', 'Simulated'];
+  const platformLabels = ['Gmail', 'Outlook', 'SMS', 'Slack', 'Discord', 'Telegram', 'WhatsApp', 'X', 'Manual'];
   const connectionsByPlatform = platformLabels.map((label, i) => ({
     platform: label,
     count: connectionCounts[i][0]?.count ?? 0,

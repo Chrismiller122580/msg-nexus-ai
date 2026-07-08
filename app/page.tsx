@@ -17,7 +17,7 @@ export default function HomePage() {
     { name: 'Telegram', color: '#229ED9' },
     { name: 'X / Twitter', color: '#000000' },
     { name: 'Discord', color: '#5865F2' },
-    { name: 'iMessage', color: '#34C759' },
+
   ];
 
   return (
@@ -50,7 +50,7 @@ export default function HomePage() {
       {/* Hero */}
       <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-sm mb-6 text-muted-foreground">
-          <Zap size={14} /> Phase 1 now available
+          <Zap size={14} /> Unified messaging, one inbox
         </div>
 
         <h1 className="text-6xl md:text-7xl font-semibold tracking-tighter mb-6">
@@ -61,7 +61,7 @@ export default function HomePage() {
         </h1>
 
         <p className="max-w-2xl mx-auto text-xl text-muted-foreground mb-10">
-          One inbox for WhatsApp, Email, Slack, SMS, Telegram, X, Discord &amp; iMessage. 
+          One inbox for WhatsApp, Email, Slack, SMS, Telegram, X, and Discord.
           Semantic search. Automatic detection of bills, subscriptions, and shopping.
         </p>
 
@@ -81,7 +81,7 @@ export default function HomePage() {
         </div>
 
         <div className="mt-8 text-xs text-muted-foreground">
-          No credit card required • Free demo account available
+          No credit card required • Free plan available
         </div>
       </div>
 
@@ -128,7 +128,7 @@ export default function HomePage() {
               <h3 className="font-semibold mb-2 text-lg">Semantic Search</h3>
               <p className="text-muted-foreground text-sm">
                 Type naturally: “Netflix bill”, “rent due this month”, or “Amazon headphones”. 
-                Our local AI finds the right messages instantly.
+                Smart search finds the right messages instantly.
               </p>
             </div>
 
@@ -153,8 +153,7 @@ export default function HomePage() {
         </div>
         <h2 className="text-3xl font-semibold tracking-tight mb-3">Your data stays yours.</h2>
         <p className="max-w-md mx-auto text-muted-foreground">
-          AI parsing runs client-side for speed. Your messages and insights are stored securely in Postgres.
-          Export your data anytime.
+          Your messages and insights are stored securely. Export your data anytime.
         </p>
 
         <div className="mt-10">
@@ -168,7 +167,7 @@ export default function HomePage() {
       </div>
 
       <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
-        Built as a Phase 1 demo • MsgNexus.AI
+        MsgNexus.AI
       </footer>
     </div>
   );
