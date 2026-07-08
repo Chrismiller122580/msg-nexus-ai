@@ -236,6 +236,7 @@ export default function SettingsClient() {
 
         <div className="space-y-4">
           <OAuthCard icon={<Mail className="text-blue-500" size={20} />} title="Gmail" hint="GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET"
+            callbackPath="/api/auth/gmail/callback" oauthProviderLabel="Google Cloud Console"
             status={gmail} connectHref="/api/auth/gmail" onSync={() => runSync('gmail', syncGmailAction)}
             syncing={syncing.gmail} onDisconnect={async () => { await disconnectGmailAction(); await reload(); toast.success('Disconnected'); }} />
 
@@ -386,10 +387,19 @@ export default function SettingsClient() {
   );
 }
 
-function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect }: {
+function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel }: {
   icon: ReactNode; title: string; hint: string; status: Status;
   connectHref: string; onSync: () => void; syncing?: boolean; onDisconnect: () => void;
+  callbackPath?: string; oauthProviderLabel?: string;
 }) {
+  const [callbackUrl, setCallbackUrl] = useState('');
+
+  useEffect(() => {
+    if (callbackPath && typeof window !== 'undefined') {
+      setCallbackUrl(`${window.location.origin}${callbackPath}`);
+    }
+  }, [callbackPath]);
+
   return (
     <div className="card p-6 space-y-4">
       <div className="flex items-center gap-3">
@@ -397,6 +407,13 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
         <div><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">OAuth connect + sync</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
+      {status.configured && callbackUrl && oauthProviderLabel && (
+        <details className="text-xs text-muted-foreground rounded-xl border border-border p-3">
+          <summary className="cursor-pointer font-medium text-foreground">Fix redirect_uri_mismatch</summary>
+          <p className="mt-2">In {oauthProviderLabel} → Credentials → your OAuth client → <strong>Authorized redirect URIs</strong>, add exactly:</p>
+          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px]">{callbackUrl}</code>
+        </details>
+      )}
       {status.connected ? (
         <ConnectedActions identifier={status.identifier} lastSyncedAt={status.lastSyncedAt}
           onSync={onSync} syncing={syncing} onDisconnect={onDisconnect} />
