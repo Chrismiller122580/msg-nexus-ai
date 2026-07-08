@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { getResendUserMessage } from '../lib/resend-errors';
+import { getResendUserMessage, parseResendError } from '../lib/resend-errors';
 
 describe('getResendUserMessage', () => {
   it('explains resend.dev sandbox restriction', () => {
@@ -9,6 +9,15 @@ describe('getResendUserMessage', () => {
       403
     );
     assert.match(msg, /verify msgnexus.ai/i);
+  });
+
+  it('explains unverified domain from Resend API', () => {
+    const msg = parseResendError({
+      statusCode: 403,
+      message: 'The msgnexus.ai domain is not verified. Please, add and verify your domain',
+      name: 'validation_error',
+    });
+    assert.match(msg, /not verified in Resend/i);
   });
 
   it('explains missing from address', () => {

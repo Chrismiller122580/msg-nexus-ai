@@ -1,8 +1,8 @@
 import { Resend } from 'resend';
 import { WelcomeEmail } from '@/lib/emails/welcome-email';
-import { MagicLinkEmail } from '@/lib/emails/magic-link-email';
 import { getAppUrl } from '@/lib/app-url';
-import { getResendUserMessage } from '@/lib/resend-errors';
+import { buildMagicLinkHtml } from '@/lib/magic-link-html';
+import { getResendUserMessage, parseResendError } from '@/lib/resend-errors';
 
 const RESEND_DEV_FROM = 'MsgNexus.AI <onboarding@resend.dev>';
 
@@ -56,18 +56,12 @@ export async function sendMagicLinkEmail(
       from: getFromAddress()!,
       to: email,
       subject: 'Sign in to MsgNexus.AI',
-      react: MagicLinkEmail({ signInUrl }),
+      html: buildMagicLinkHtml(signInUrl),
     });
 
     if (error) {
       console.error('Resend magic link error:', error);
-      const message = getResendUserMessage(
-        JSON.stringify(error),
-        typeof error === 'object' && error && 'statusCode' in error
-          ? Number((error as { statusCode?: number }).statusCode) || 422
-          : 422
-      );
-      return { ok: false, error: message };
+      return { ok: false, error: parseResendError(error) };
     }
 
     if (!data?.id) {
