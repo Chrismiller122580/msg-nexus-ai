@@ -16,8 +16,10 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const savedState = cookieStore.get('x-oauth-state')?.value;
   const verifier = cookieStore.get('x-pkce-verifier')?.value;
+  const oauthOrigin = cookieStore.get('x-oauth-origin')?.value;
   cookieStore.delete('x-oauth-state');
   cookieStore.delete('x-pkce-verifier');
+  cookieStore.delete('x-oauth-origin');
 
   if (!code || !state || !savedState || state !== savedState || !verifier) {
     redirect('/settings?error=x-auth-failed');
@@ -25,7 +27,7 @@ export async function GET(request: Request) {
 
   let success = false;
   try {
-    const tokens = await exchangeXCode(code, verifier);
+    const tokens = await exchangeXCode(code, verifier, oauthOrigin);
     const profile = await getXProfile(tokens.access_token);
     const db = getDb();
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);

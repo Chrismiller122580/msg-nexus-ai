@@ -1,6 +1,6 @@
 import { getDb, gmailConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl } from '@/lib/app-url';
+import { getAppUrl, getOAuthCallbackUrl } from '@/lib/app-url';
 import { getGoogleClientSecret, isGoogleOAuthConfigured } from '@/lib/google-oauth';
 
 const GMAIL_SCOPES = [
@@ -12,8 +12,8 @@ export function isGmailConfigured(): boolean {
   return isGoogleOAuthConfigured();
 }
 
-export function getGmailAuthUrl(state: string): string {
-  const redirectUri = `${getAppUrl()}/api/auth/gmail/callback`;
+export function getGmailAuthUrl(state: string, appUrl?: string): string {
+  const redirectUri = getOAuthCallbackUrl('gmail', appUrl);
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,
     redirect_uri: redirectUri,
@@ -26,8 +26,8 @@ export function getGmailAuthUrl(state: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export async function exchangeGmailCode(code: string) {
-  const redirectUri = `${getAppUrl()}/api/auth/gmail/callback`;
+export async function exchangeGmailCode(code: string, appUrl?: string) {
+  const redirectUri = getOAuthCallbackUrl('gmail', appUrl);
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

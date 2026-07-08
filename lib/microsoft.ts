@@ -1,6 +1,6 @@
 import { getDb, outlookConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl } from '@/lib/app-url';
+import { getOAuthCallbackUrl } from '@/lib/app-url';
 
 const MICROSOFT_SCOPES = [
   'offline_access',
@@ -15,8 +15,8 @@ export function isMicrosoftConfigured(): boolean {
   return Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
 }
 
-export function getMicrosoftAuthUrl(state: string): string {
-  const redirectUri = `${getAppUrl()}/api/auth/microsoft/callback`;
+export function getMicrosoftAuthUrl(state: string, appUrl?: string): string {
+  const redirectUri = getOAuthCallbackUrl('microsoft', appUrl);
   const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
   const params = new URLSearchParams({
     client_id: process.env.MICROSOFT_CLIENT_ID!,
@@ -29,8 +29,8 @@ export function getMicrosoftAuthUrl(state: string): string {
   return `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;
 }
 
-export async function exchangeMicrosoftCode(code: string) {
-  const redirectUri = `${getAppUrl()}/api/auth/microsoft/callback`;
+export async function exchangeMicrosoftCode(code: string, appUrl?: string) {
+  const redirectUri = getOAuthCallbackUrl('microsoft', appUrl);
   const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
   const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
     method: 'POST',

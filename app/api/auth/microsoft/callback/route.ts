@@ -17,8 +17,10 @@ export async function GET(request: Request) {
   const state = url.searchParams.get('state');
   const cookieStore = await cookies();
   const savedState = cookieStore.get('microsoft-oauth-state')?.value;
+  const oauthOrigin = cookieStore.get('microsoft-oauth-origin')?.value;
 
   cookieStore.delete('microsoft-oauth-state');
+  cookieStore.delete('microsoft-oauth-origin');
 
   if (!code || !state || !savedState || state !== savedState) {
     redirect('/settings?error=outlook-auth-failed');
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
 
   let success = false;
   try {
-    const tokens = await exchangeMicrosoftCode(code);
+    const tokens = await exchangeMicrosoftCode(code, oauthOrigin);
     const profile = await getMicrosoftProfile(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();

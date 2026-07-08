@@ -1,6 +1,6 @@
 import { getDb, slackConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl } from '@/lib/app-url';
+import { getOAuthCallbackUrl } from '@/lib/app-url';
 
 const SLACK_SCOPES = ['channels:history', 'im:history', 'users:read', 'users:read.email'].join(',');
 
@@ -8,17 +8,17 @@ export function isSlackConfigured(): boolean {
   return Boolean(process.env.SLACK_CLIENT_ID && process.env.SLACK_CLIENT_SECRET);
 }
 
-export function getSlackAuthUrl(state: string): string {
+export function getSlackAuthUrl(state: string, appUrl?: string): string {
   const params = new URLSearchParams({
     client_id: process.env.SLACK_CLIENT_ID!,
     scope: SLACK_SCOPES,
-    redirect_uri: `${getAppUrl()}/api/auth/slack/callback`,
+    redirect_uri: getOAuthCallbackUrl('slack', appUrl),
     state,
   });
   return `https://slack.com/oauth/v2/authorize?${params}`;
 }
 
-export async function exchangeSlackCode(code: string) {
+export async function exchangeSlackCode(code: string, appUrl?: string) {
   const res = await fetch('https://slack.com/api/oauth.v2.access', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -26,7 +26,7 @@ export async function exchangeSlackCode(code: string) {
       client_id: process.env.SLACK_CLIENT_ID!,
       client_secret: process.env.SLACK_CLIENT_SECRET!,
       code,
-      redirect_uri: `${getAppUrl()}/api/auth/slack/callback`,
+      redirect_uri: getOAuthCallbackUrl('slack', appUrl),
     }),
   });
   const data = await res.json() as {

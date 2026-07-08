@@ -1,6 +1,6 @@
 import { getDb, xConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl } from '@/lib/app-url';
+import { getOAuthCallbackUrl } from '@/lib/app-url';
 import crypto from 'crypto';
 
 const X_SCOPES = ['dm.read', 'tweet.read', 'users.read', 'offline.access'].join(' ');
@@ -9,11 +9,11 @@ export function isXConfigured(): boolean {
   return Boolean(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET);
 }
 
-export function getXAuthUrl(state: string, codeChallenge: string): string {
+export function getXAuthUrl(state: string, codeChallenge: string, appUrl?: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.X_CLIENT_ID!,
-    redirect_uri: `${getAppUrl()}/api/auth/x/callback`,
+    redirect_uri: getOAuthCallbackUrl('x', appUrl),
     scope: X_SCOPES,
     state,
     code_challenge: codeChallenge,
@@ -28,7 +28,7 @@ export function generatePkce(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
-export async function exchangeXCode(code: string, codeVerifier: string) {
+export async function exchangeXCode(code: string, codeVerifier: string, appUrl?: string) {
   const credentials = Buffer.from(`${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`).toString('base64');
   const res = await fetch('https://api.twitter.com/2/oauth2/token', {
     method: 'POST',
@@ -39,7 +39,7 @@ export async function exchangeXCode(code: string, codeVerifier: string) {
     body: new URLSearchParams({
       code,
       grant_type: 'authorization_code',
-      redirect_uri: `${getAppUrl()}/api/auth/x/callback`,
+      redirect_uri: getOAuthCallbackUrl('x', appUrl),
       code_verifier: codeVerifier,
     }),
   });

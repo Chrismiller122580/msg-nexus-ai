@@ -15,7 +15,9 @@ export async function GET(request: Request) {
   const state = url.searchParams.get('state');
   const cookieStore = await cookies();
   const savedState = cookieStore.get('discord-oauth-state')?.value;
+  const oauthOrigin = cookieStore.get('discord-oauth-origin')?.value;
   cookieStore.delete('discord-oauth-state');
+  cookieStore.delete('discord-oauth-origin');
 
   if (!code || !state || !savedState || state !== savedState) {
     redirect('/settings?error=discord-auth-failed');
@@ -23,7 +25,7 @@ export async function GET(request: Request) {
 
   let success = false;
   try {
-    const tokens = await exchangeDiscordCode(code);
+    const tokens = await exchangeDiscordCode(code, oauthOrigin);
     const profile = await getDiscordProfile(tokens.access_token);
     const db = getDb();
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);

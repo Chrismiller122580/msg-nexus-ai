@@ -15,7 +15,9 @@ export async function GET(request: Request) {
   const state = url.searchParams.get('state');
   const cookieStore = await cookies();
   const savedState = cookieStore.get('slack-oauth-state')?.value;
+  const oauthOrigin = cookieStore.get('slack-oauth-origin')?.value;
   cookieStore.delete('slack-oauth-state');
+  cookieStore.delete('slack-oauth-origin');
 
   if (!code || !state || !savedState || state !== savedState) {
     redirect('/settings?error=slack-auth-failed');
@@ -23,7 +25,7 @@ export async function GET(request: Request) {
 
   let success = false;
   try {
-    const data = await exchangeSlackCode(code);
+    const data = await exchangeSlackCode(code, oauthOrigin);
     const userName = await getSlackUser(data.access_token!);
     const db = getDb();
     const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;

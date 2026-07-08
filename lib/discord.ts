@@ -1,6 +1,6 @@
 import { getDb, discordConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl } from '@/lib/app-url';
+import { getOAuthCallbackUrl } from '@/lib/app-url';
 
 const DISCORD_SCOPES = ['identify', 'guilds', 'dm_channels.read'].join(' ');
 
@@ -8,10 +8,10 @@ export function isDiscordConfigured(): boolean {
   return Boolean(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET);
 }
 
-export function getDiscordAuthUrl(state: string): string {
+export function getDiscordAuthUrl(state: string, appUrl?: string): string {
   const params = new URLSearchParams({
     client_id: process.env.DISCORD_CLIENT_ID!,
-    redirect_uri: `${getAppUrl()}/api/auth/discord/callback`,
+    redirect_uri: getOAuthCallbackUrl('discord', appUrl),
     response_type: 'code',
     scope: DISCORD_SCOPES,
     state,
@@ -19,7 +19,7 @@ export function getDiscordAuthUrl(state: string): string {
   return `https://discord.com/api/oauth2/authorize?${params}`;
 }
 
-export async function exchangeDiscordCode(code: string) {
+export async function exchangeDiscordCode(code: string, appUrl?: string) {
   const res = await fetch('https://discord.com/api/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -28,7 +28,7 @@ export async function exchangeDiscordCode(code: string) {
       client_secret: process.env.DISCORD_CLIENT_SECRET!,
       grant_type: 'authorization_code',
       code,
-      redirect_uri: `${getAppUrl()}/api/auth/discord/callback`,
+      redirect_uri: getOAuthCallbackUrl('discord', appUrl),
     }),
   });
   if (!res.ok) throw new Error('Discord OAuth failed');

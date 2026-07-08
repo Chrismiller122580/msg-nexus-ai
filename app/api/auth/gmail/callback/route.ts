@@ -17,8 +17,10 @@ export async function GET(request: Request) {
   const state = url.searchParams.get('state');
   const cookieStore = await cookies();
   const savedState = cookieStore.get('gmail-oauth-state')?.value;
+  const oauthOrigin = cookieStore.get('gmail-oauth-origin')?.value;
 
   cookieStore.delete('gmail-oauth-state');
+  cookieStore.delete('gmail-oauth-origin');
 
   if (!code || !state || !savedState || state !== savedState) {
     redirect('/settings?error=gmail-auth-failed');
@@ -26,7 +28,7 @@ export async function GET(request: Request) {
 
   let success = false;
   try {
-    const tokens = await exchangeGmailCode(code);
+    const tokens = await exchangeGmailCode(code, oauthOrigin);
     const profile = await getGmailProfile(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();
