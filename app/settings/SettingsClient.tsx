@@ -241,18 +241,22 @@ export default function SettingsClient() {
             syncing={syncing.gmail} onDisconnect={async () => { await disconnectGmailAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<Mail className="text-sky-500" size={20} />} title="Outlook" hint="MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET"
+            callbackPath="/api/auth/microsoft/callback" oauthProviderLabel="Azure Portal → App registration → Redirect URIs"
             status={outlook} connectHref="/api/auth/microsoft" onSync={() => runSync('outlook', syncOutlookAction)}
             syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<Hash className="text-purple-500" size={20} />} title="Slack" hint="SLACK_CLIENT_ID, SLACK_CLIENT_SECRET"
+            callbackPath="/api/auth/slack/callback" oauthProviderLabel="api.slack.com → Your App → OAuth & Permissions"
             status={slack} connectHref="/api/auth/slack" onSync={() => runSync('slack', syncSlackAction)}
             syncing={syncing.slack} onDisconnect={async () => { await disconnectSlackAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<MessageCircle className="text-indigo-500" size={20} />} title="Discord" hint="DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET"
+            callbackPath="/api/auth/discord/callback" oauthProviderLabel="Discord Developer Portal → OAuth2 → Redirects"
             status={discord} connectHref="/api/auth/discord" onSync={() => runSync('discord', syncDiscordAction)}
             syncing={syncing.discord} onDisconnect={async () => { await disconnectDiscordAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<AtSign className="text-foreground" size={20} />} title="X / Twitter" hint="X_CLIENT_ID, X_CLIENT_SECRET"
+            callbackPath="/api/auth/x/callback" oauthProviderLabel="developer.x.com → User authentication settings"
             status={xPlatform} connectHref="/api/auth/x" onSync={() => runSync('x', syncXAction)}
             syncing={syncing.x} onDisconnect={async () => { await disconnectXAction(); await reload(); toast.success('Disconnected'); }} />
 
@@ -407,11 +411,17 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
         <div><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">OAuth connect + sync</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
-      {status.configured && callbackUrl && oauthProviderLabel && (
+      {callbackUrl && oauthProviderLabel && (
         <details className="text-xs text-muted-foreground rounded-xl border border-border p-3">
-          <summary className="cursor-pointer font-medium text-foreground">Fix redirect_uri_mismatch</summary>
-          <p className="mt-2">In {oauthProviderLabel} → Credentials → your OAuth client → <strong>Authorized redirect URIs</strong>, add exactly:</p>
-          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px]">{callbackUrl}</code>
+          <summary className="cursor-pointer font-medium text-foreground">
+            {status.configured ? 'OAuth redirect URI' : 'Setup: redirect URI'}
+          </summary>
+          <p className="mt-2">
+            {status.configured
+              ? `If connect fails with redirect_uri_mismatch, add this exact URI in ${oauthProviderLabel}:`
+              : `After adding server env vars, register this redirect URI in ${oauthProviderLabel}:`}
+          </p>
+          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px] select-all">{callbackUrl}</code>
         </details>
       )}
       {status.connected ? (
