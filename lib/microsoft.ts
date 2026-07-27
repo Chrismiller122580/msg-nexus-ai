@@ -16,6 +16,13 @@ export function isMicrosoftConfigured(): boolean {
   return Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
 }
 
+/**
+ * OAuth authorize URL for Outlook.
+ * - Use MICROSOFT_TENANT_ID=common (default) for work + personal Microsoft accounts
+ * - Use consumers for personal only (outlook.com / hotmail / live)
+ * - Azure app must allow “personal Microsoft accounts” or users see admin-only errors
+ * - Work tenants may need admin consent once for Mail.Read
+ */
 export function getMicrosoftAuthUrl(state: string, appUrl?: string): string {
   const redirectUri = getOAuthCallbackUrl('microsoft', appUrl);
   const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
@@ -26,8 +33,20 @@ export function getMicrosoftAuthUrl(state: string, appUrl?: string): string {
     scope: MICROSOFT_SCOPES,
     response_mode: 'query',
     state,
+    prompt: 'select_account',
   });
   return `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;
+}
+
+/** One-time admin consent URL for work/school tenants that block Mail.Read. */
+export function getMicrosoftAdminConsentUrl(appUrl?: string): string {
+  const redirectUri = getOAuthCallbackUrl('microsoft', appUrl);
+  const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
+  const params = new URLSearchParams({
+    client_id: process.env.MICROSOFT_CLIENT_ID!,
+    redirect_uri: redirectUri,
+  });
+  return `https://login.microsoftonline.com/${tenant}/adminconsent?${params}`;
 }
 
 export async function exchangeMicrosoftCode(code: string, appUrl?: string) {

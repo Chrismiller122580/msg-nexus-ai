@@ -24,11 +24,18 @@ export async function syncTwilioForUser(
     return { imported: 0, error: 'SMS is not connected.' };
   }
 
-  const fetched = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
+  const { messages: fetched, error: fetchError } = await fetchTwilioMessagesForPhone(
+    conn.phoneNumber,
+    limit
+  );
+  if (fetchError) {
+    return { imported: 0, error: fetchError };
+  }
+
   await ensureConnectedAccount(userId, 'sms', conn.phoneNumber, 'Twilio SMS');
 
   for (const m of fetched) {
-    const isOutbound = m.from === conn.phoneNumber;
+    const isOutbound = m.from === conn.phoneNumber || m.from.replace(/\D/g, '') === conn.phoneNumber.replace(/\D/g, '');
     await saveSmsMessage({
       userId,
       from: m.from,
@@ -57,6 +64,14 @@ export async function syncTwilioForUser(
     .update(twilioConnections)
     .set({ lastSyncedAt: new Date() })
     .where(eq(twilioConnections.userId, userId));
+
+  if (imported === 0 && fetched.length === 0) {
+    return {
+      imported: 0,
+      error:
+        'No SMS found for this number. Confirm TWILIO_PHONE_NUMBER matches your Twilio number, the webhook is set to /api/webhooks/twilio, and try sending a test SMS.',
+    };
+  }
 
   return { imported };
 }

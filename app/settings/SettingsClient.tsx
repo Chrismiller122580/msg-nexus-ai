@@ -117,8 +117,8 @@ export default function SettingsClient() {
     setSyncing((s) => ({ ...s, [key]: true }));
     try {
       const r = await fn();
-      if (r.error) toast.error(r.error);
-      else if (r.info && (r.imported ?? 0) === 0) toast.info(r.info);
+      if (r.error) toast.error(r.error, { duration: 8000 });
+      else if (r.info && (r.imported ?? 0) === 0) toast.info(r.info, { duration: 10000 });
       else toast.success(`Imported ${r.imported ?? 0} messages${r.info ? ` — ${r.info}` : ''}`);
       await reload();
     } finally {
@@ -244,7 +244,20 @@ export default function SettingsClient() {
           <OAuthCard icon={<Mail className="text-sky-500" size={20} />} title="Outlook" hint="MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET"
             callbackPath="/api/auth/microsoft/callback" oauthProviderLabel="Azure Portal → App registration → Redirect URIs"
             status={outlook} connectHref="/api/auth/microsoft" onSync={() => runSync('outlook', syncOutlookAction)}
-            syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }} />
+            syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }}
+            extraHelp={
+              <div className="text-xs text-muted-foreground space-y-1.5 rounded-xl border border-border p-3">
+                <p className="font-medium text-foreground">If Microsoft asks for an admin account</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Azure app → Authentication → allow <strong>personal Microsoft accounts</strong> (or “any org + personal”).</li>
+                  <li>Redirect URI (Web): <code className="bg-muted px-1 rounded break-all">{webhookBase}/api/auth/microsoft/callback</code></li>
+                  <li>API permissions: <code className="bg-muted px-1 rounded">Mail.Read</code>, <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">offline_access</code> (delegated).</li>
+                  <li>Work/school only: an admin must grant consent once (Enterprise apps → Admin consent).</li>
+                  <li>Personal Hotmail/Outlook.com: sign in with that Microsoft account, not a work admin.</li>
+                </ul>
+              </div>
+            }
+          />
 
           <OAuthCard icon={<Hash className="text-purple-500" size={20} />} title="Slack" hint="SLACK_CLIENT_ID, SLACK_CLIENT_SECRET"
             callbackPath="/api/auth/slack/callback" oauthProviderLabel="api.slack.com → Your App → OAuth & Permissions"
@@ -345,7 +358,9 @@ export default function SettingsClient() {
             }}
             onSync={() => runSync('whatsapp', syncWhatsAppAction)} syncing={syncing.whatsapp}
             onDisconnect={async () => { await disconnectWhatsAppAction(); await reload(); toast.success('Disconnected'); }}
-            webhookUrl={`${webhookBase}/api/webhooks/whatsapp`} />
+            webhookUrl={`${webhookBase}/api/webhooks/whatsapp`}
+            extraNote="WhatsApp has no history API — Sync will not pull old chats. Configure Meta webhook (messages) with verify token WHATSAPP_VERIFY_TOKEN, then text your Business number."
+          />
 
           <div className="card p-4 sm:p-6 space-y-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -392,10 +407,10 @@ export default function SettingsClient() {
   );
 }
 
-function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel }: {
+function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel, extraHelp }: {
   icon: ReactNode; title: string; hint: string; status: Status;
   connectHref: string; onSync: () => void; syncing?: boolean; onDisconnect: () => void;
-  callbackPath?: string; oauthProviderLabel?: string;
+  callbackPath?: string; oauthProviderLabel?: string; extraHelp?: ReactNode;
 }) {
   const [callbackUrl, setCallbackUrl] = useState('');
 
@@ -418,7 +433,7 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
             {status.configured ? 'Fix redirect_uri_mismatch' : 'Setup: redirect URI'}
           </summary>
           <p className="mt-2">
-            Google / OAuth error <strong>400: redirect_uri_mismatch</strong> means this URI is missing.
+            OAuth error <strong>400: redirect_uri_mismatch</strong> means this URI is missing.
             In {oauthProviderLabel}, open your <strong>Web application</strong> client (same as server env) and add exactly:
           </p>
           <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px] select-all font-mono">{callbackUrl}</code>
@@ -426,6 +441,7 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
           <p className="mt-1">Click <strong>Save</strong>, wait 1–2 minutes, then try Connect again.</p>
         </details>
       )}
+      {extraHelp}
       {status.connected ? (
         <ConnectedActions identifier={status.identifier} lastSyncedAt={status.lastSyncedAt}
           onSync={onSync} syncing={syncing} onDisconnect={onDisconnect} />
@@ -438,10 +454,11 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
   );
 }
 
-function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSync, syncing, onDisconnect, webhookUrl }: {
+function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSync, syncing, onDisconnect, webhookUrl, extraNote }: {
   icon: ReactNode; title: string; hint: string; status: Status;
   phone: string; setPhone: (v: string) => void;
   onConnect: () => void; onSync: () => void; syncing?: boolean; onDisconnect: () => void; webhookUrl: string;
+  extraNote?: string;
 }) {
   return (
     <div className="card p-4 sm:p-6 space-y-4">
@@ -461,6 +478,7 @@ function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSy
         </div>
       )}
       {status.configured && <p className="text-xs text-muted-foreground">Webhook: <code className="break-all">{webhookUrl}</code></p>}
+      {extraNote && <p className="text-xs text-amber-700 dark:text-amber-400/90 leading-relaxed">{extraNote}</p>}
     </div>
   );
 }

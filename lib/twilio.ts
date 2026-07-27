@@ -1,9 +1,13 @@
 import crypto from 'crypto';
+import { getAppUrl } from '@/lib/app-url';
+import { normalizePhoneNumber, phonesMatch } from '@/lib/phone';
+
+export { normalizePhoneNumber, phonesMatch };
 
 export function isTwilioConfigured(): boolean {
   return Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-    process.env.TWILIO_AUTH_TOKEN
+    process.env.TWILIO_ACCOUNT_SID?.trim() &&
+    process.env.TWILIO_AUTH_TOKEN?.trim()
   );
 }
 
@@ -30,10 +34,37 @@ export function validateTwilioSignature(
 
   const expected = crypto
     .createHmac('sha1', process.env.TWILIO_AUTH_TOKEN)
-    .update(sorted)
+    .update(Buffer.from(sorted, 'utf8'))
     .digest('base64');
 
-  return expected === signature;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return expected === signature;
+  }
+}
+
+/** Twilio signs the exact public URL configured in the console — try common variants. */
+export function validateTwilioSignatureForRequest(
+  signature: string | null,
+  request: Request,
+  params: Record<string, string>
+): boolean {
+  if (process.env.NODE_ENV !== 'production') return true;
+  if (!signature) return false;
+
+  const requestUrl = request.url.split('?')[0];
+  const app = getAppUrl().replace(/\/$/, '');
+  const candidates = Array.from(
+    new Set([
+      requestUrl,
+      `${app}/api/webhooks/twilio`,
+      'https://www.msgnexus.ai/api/webhooks/twilio',
+      'https://msgnexus.ai/api/webhooks/twilio',
+    ])
+  );
+
+  return candidates.some((url) => validateTwilioSignature(signature, url, params));
 }
 
 interface TwilioMessage {
@@ -45,42 +76,76 @@ interface TwilioMessage {
   date_created?: string;
 }
 
-export async function fetchTwilioMessagesForPhone(phoneNumber: string, max = 25) {
-  if (!isTwilioConfigured()) return [];
+export type TwilioFetchedMessage = {
+  externalId: string;
+  from: string;
+  body: string;
+  timestamp: string;
+};
+
+export async function fetchTwilioMessagesForPhone(
+  phoneNumber: string,
+  max = 25
+): Promise<{ messages: TwilioFetchedMessage[]; error?: string }> {
+  if (!isTwilioConfigured()) {
+    return { messages: [], error: 'Twilio is not configured on the server.' };
+  }
+
+  // Prefer the server Twilio number (matches Twilio Console) when the user
+  // connected the same line under a slightly different format.
+  const envPhone = process.env.TWILIO_PHONE_NUMBER?.trim();
+  const normalizedUser = normalizePhoneNumber(phoneNumber);
+  const line =
+    envPhone && phonesMatch(envPhone, normalizedUser)
+      ? normalizePhoneNumber(envPhone)
+      : normalizedUser || (envPhone ? normalizePhoneNumber(envPhone) : '');
+
+  if (!line) {
+    return { messages: [], error: 'No valid Twilio phone number to sync.' };
+  }
 
   const sid = process.env.TWILIO_ACCOUNT_SID!;
-  const encoded = encodeURIComponent(phoneNumber);
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?PageSize=${max}&To=${encoded}`;
+  const encoded = encodeURIComponent(line);
 
-  const res = await fetch(url, {
-    headers: { Authorization: getTwilioAuthHeader() },
-  });
-  if (!res.ok) return [];
+  async function list(query: string): Promise<{ messages: TwilioMessage[]; error?: string }> {
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?PageSize=${max}&${query}=${encoded}`;
+    const res = await fetch(url, { headers: { Authorization: getTwilioAuthHeader() } });
+    const data = (await res.json().catch(() => ({}))) as {
+      messages?: TwilioMessage[];
+      message?: string;
+      code?: number;
+    };
+    if (!res.ok) {
+      return {
+        messages: [],
+        error: data.message || `Twilio API error HTTP ${res.status}`,
+      };
+    }
+    return { messages: data.messages || [] };
+  }
 
-  const data = await res.json() as { messages?: TwilioMessage[] };
-  const inbound = data.messages || [];
+  const to = await list('To');
+  if (to.error) return { messages: [], error: to.error };
+  const from = await list('From');
+  if (from.error) return { messages: [], error: from.error };
 
-  const urlFrom = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?PageSize=${max}&From=${encoded}`;
-  const resFrom = await fetch(urlFrom, {
-    headers: { Authorization: getTwilioAuthHeader() },
-  });
-  const dataFrom = resFrom.ok
-    ? await resFrom.json() as { messages?: TwilioMessage[] }
-    : { messages: [] };
-
-  const combined = [...inbound, ...(dataFrom.messages || [])];
+  const combined = [...to.messages, ...from.messages];
   const seen = new Set<string>();
 
-  return combined.filter((m) => {
-    if (seen.has(m.sid)) return false;
-    seen.add(m.sid);
-    return true;
-  }).map((m) => ({
-    externalId: m.sid,
-    from: m.from,
-    body: m.body || '(empty SMS)',
-    timestamp: m.date_sent || m.date_created || new Date().toISOString(),
-  }));
+  const messages = combined
+    .filter((m) => {
+      if (seen.has(m.sid)) return false;
+      seen.add(m.sid);
+      return true;
+    })
+    .map((m) => ({
+      externalId: m.sid,
+      from: m.from,
+      body: m.body || '(empty SMS)',
+      timestamp: m.date_sent || m.date_created || new Date().toISOString(),
+    }));
+
+  return { messages };
 }
 
 export async function sendTwilioSms(
@@ -129,10 +194,3 @@ export async function sendTwilioSms(
   };
 }
 
-export function normalizePhoneNumber(input: string): string {
-  const digits = input.replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-  if (input.startsWith('+')) return `+${digits}`;
-  return `+${digits}`;
-}

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePhoneNumber } from '../lib/twilio';
 
-describe('normalizePhoneNumber', () => {
+describe('normalizePhoneNumber (twilio re-export)', () => {
   it('adds US country code for 10-digit numbers', () => {
     assert.equal(normalizePhoneNumber('5551234567'), '+15551234567');
   });

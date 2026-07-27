@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getDb, twilioConnections } from '@/db';
-import { validateTwilioSignature } from '@/lib/twilio';
+import { phonesMatch, validateTwilioSignatureForRequest } from '@/lib/twilio';
 import { getTwilioAutoReplyMessage, twimlEmptyResponse, twimlMessageResponse } from '@/lib/twilio-twiml';
 import { ingestTwilioWebhookMessage } from '@/lib/twilio-sync';
-import { getAppUrl } from '@/lib/app-url';
 
 function twimlResponse(body: string) {
   return new NextResponse(body, {
@@ -19,9 +18,9 @@ export async function POST(request: Request) {
   }
 
   const signature = request.headers.get('x-twilio-signature');
-  const url = `${getAppUrl()}/api/webhooks/twilio`;
 
-  if (process.env.NODE_ENV === 'production' && !validateTwilioSignature(signature, url, params)) {
+  if (!validateTwilioSignatureForRequest(signature, request, params)) {
+    console.error('[twilio-webhook] signature validation failed');
     return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
   }
 
@@ -40,9 +39,9 @@ export async function POST(request: Request) {
 
   for (const conn of connections) {
     const matchesUser =
-      to === conn.phoneNumber ||
-      from === conn.phoneNumber ||
-      connections.length === 1;
+      connections.length === 1 ||
+      (to && phonesMatch(to, conn.phoneNumber)) ||
+      phonesMatch(from, conn.phoneNumber);
 
     if (!matchesUser) continue;
 
@@ -57,6 +56,10 @@ export async function POST(request: Request) {
     });
     ingested = true;
     break;
+  }
+
+  if (!ingested) {
+    console.warn('[twilio-webhook] no matching twilio connection for To=', to, 'From=', from);
   }
 
   const autoReply = getTwilioAutoReplyMessage();

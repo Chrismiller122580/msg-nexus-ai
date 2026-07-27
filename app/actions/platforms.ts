@@ -159,7 +159,7 @@ export async function syncWhatsAppAction() {
   if (result.error) return { error: result.error };
   revalidatePath('/inbox');
   revalidatePath('/settings');
-  return { success: true, imported: result.imported };
+  return { success: true, imported: result.imported, info: result.info };
 }
 
 export async function syncXAction() {
