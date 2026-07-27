@@ -15,6 +15,7 @@ import { PLATFORMS, getPlatform } from '../../lib/platforms';
 import { getMessageBadge } from '../../lib/message-display';
 import { parseMessage } from '../../lib/ai-parser';
 import { searchMessages, getTopInsights } from '../../lib/semantic-search';
+import { buildSubscriptionCancelList, getCancelGuide } from '../../lib/subscription-cancel';
 import { formatRelativeTime, formatCurrency, cn, downloadJson } from '../../lib/utils';
 import { logoutAction } from '../actions/auth';
 import {
@@ -27,6 +28,7 @@ import { getGmailStatus, syncGmailAction } from '../actions/gmail';
 import { getTwilioStatus, sendSmsAction } from '../actions/twilio';
 import { MsgNexusLogo } from '../components/MsgNexusLogo';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { SubscriptionCancelHelp } from '../components/SubscriptionCancelHelp';
 
 type ViewMode = 'inbox' | 'pulse';
 
@@ -238,9 +240,11 @@ export default function InboxClient() {
       .filter(b => b.insight.amount != null)
       .sort((a, b) => (a.insight.amount || 0) - (b.insight.amount || 0));
     const totalUpcoming = upcomingBills.reduce((sum, b) => sum + (b.insight.amount || 0), 0);
+    const cancelList = buildSubscriptionCancelList(subs);
 
     return {
       subs,
+      cancelList,
       bills: upcomingBills,
       shopping,
       monthlyRecurring,
@@ -502,13 +506,21 @@ export default function InboxClient() {
         </div>
 
         {selectedInsight ? (
-          <div className="card p-3 text-sm">
-            <div className="font-medium mb-1">{selectedInsight.summary}</div>
-            <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-              <span>Category: <span className="text-foreground">{selectedInsight.category}</span></span>
-              {selectedInsight.vendor && <span>Vendor: <span className="text-foreground">{selectedInsight.vendor}</span></span>}
-              {selectedInsight.amount != null && <span>Amount: <span className="text-emerald-500">{formatCurrency(selectedInsight.amount)}</span></span>}
+          <div className="space-y-3">
+            <div className="card p-3 text-sm">
+              <div className="font-medium mb-1">{selectedInsight.summary}</div>
+              <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                <span>Category: <span className="text-foreground">{selectedInsight.category}</span></span>
+                {selectedInsight.vendor && <span>Vendor: <span className="text-foreground">{selectedInsight.vendor}</span></span>}
+                {selectedInsight.amount != null && <span>Amount: <span className="text-emerald-500">{formatCurrency(selectedInsight.amount)}</span></span>}
+              </div>
             </div>
+            {(selectedInsight.category === 'subscription' || selectedInsight.isRecurring) && (
+              <SubscriptionCancelHelp
+                guide={getCancelGuide(selectedInsight.vendor, selectedMessage.body)}
+                compact
+              />
+            )}
           </div>
         ) : (
           <button onClick={() => runParse(selectedMessage.id)} className="btn btn-primary w-full min-h-[44px]">Run AI Analysis</button>
@@ -920,17 +932,30 @@ export default function InboxClient() {
               </div>
 
               <div className="pulse-card">
-                <div className="font-semibold mb-3">Active Subscriptions</div>
-                {aggregates.subs.length === 0 && <div className="text-sm text-muted-foreground">None detected yet.</div>}
-                <div className="space-y-1">
-                  {aggregates.subs.slice(0, 5).map(({ message, insight }) => (
-                    <div
-                      key={message.id}
-                      onClick={() => { setView('inbox'); selectMessage(message.id); }}
-                      className="text-sm p-3 rounded-xl hover:bg-muted cursor-pointer flex justify-between gap-2 min-h-[44px] items-center"
-                    >
-                      <span className="truncate">{insight?.vendor || message.from}</span>
-                      <span className="text-emerald-500 tabular-nums shrink-0">{formatCurrency(insight?.amount)}</span>
+                <div className="font-semibold mb-1">Active Subscriptions</div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Detected from your inbox. Open a guide to cancel or manage each one.
+                </p>
+                {aggregates.cancelList.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    None detected yet. Connect email/SMS and run Analyze so we can find recurring charges.
+                  </div>
+                )}
+                <div className="space-y-4">
+                  {aggregates.cancelList.map((item) => (
+                    <div key={`${item.vendor}-${item.messageId}`} className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => { setView('inbox'); selectMessage(item.messageId); }}
+                        className="w-full text-sm p-3 rounded-xl hover:bg-muted cursor-pointer flex justify-between gap-2 min-h-[44px] items-center text-left border border-border/60"
+                      >
+                        <span className="truncate font-medium">{item.vendor}</span>
+                        <span className="text-emerald-500 tabular-nums shrink-0">
+                          {item.amount != null ? formatCurrency(item.amount) : '—'}
+                          {item.amount != null ? <span className="text-muted-foreground font-normal">/mo</span> : null}
+                        </span>
+                      </button>
+                      <SubscriptionCancelHelp guide={item.guide} compact />
                     </div>
                   ))}
                 </div>
