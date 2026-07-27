@@ -413,16 +413,17 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
       {callbackUrl && oauthProviderLabel && (
-        <details className="text-xs text-muted-foreground rounded-xl border border-border p-3">
+        <details className="text-xs text-muted-foreground rounded-xl border border-border p-3" open={!status.connected && status.configured && title === 'Gmail'}>
           <summary className="cursor-pointer font-medium text-foreground">
-            {status.configured ? 'OAuth redirect URI' : 'Setup: redirect URI'}
+            {status.configured ? 'Fix redirect_uri_mismatch' : 'Setup: redirect URI'}
           </summary>
           <p className="mt-2">
-            {status.configured
-              ? `If connect fails with redirect_uri_mismatch, add this exact URI in ${oauthProviderLabel}:`
-              : `After adding server env vars, register this redirect URI in ${oauthProviderLabel}:`}
+            Google / OAuth error <strong>400: redirect_uri_mismatch</strong> means this URI is missing.
+            In {oauthProviderLabel}, open your <strong>Web application</strong> client (same as server env) and add exactly:
           </p>
-          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px] select-all">{callbackUrl}</code>
+          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px] select-all font-mono">{callbackUrl}</code>
+          <p className="mt-2">Also add JavaScript origin: <code className="bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : 'https://www.msgnexus.ai'}</code></p>
+          <p className="mt-1">Click <strong>Save</strong>, wait 1–2 minutes, then try Connect again.</p>
         </details>
       )}
       {status.connected ? (

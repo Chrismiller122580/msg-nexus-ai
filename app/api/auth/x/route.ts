@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getRequestOrigin } from '@/lib/app-url';
+import { getOAuthAppUrl } from '@/lib/app-url';
 import { OAUTH_COOKIE_OPTS } from '@/lib/oauth-cookies';
 import { getCurrentUser } from '@/lib/session';
 import { generatePkce, getXAuthUrl, isXConfigured } from '@/lib/x-api';
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!user) redirect('/login?redirect=/settings');
   if (!isXConfigured()) redirect('/settings?error=x-not-configured');
 
-  const origin = getRequestOrigin(request);
+  const origin = getOAuthAppUrl(request);
   const state = generateId() + generateId();
   const { verifier, challenge } = generatePkce();
   const cookieStore = await cookies();

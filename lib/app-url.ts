@@ -17,7 +17,7 @@ export function getAppUrl(): string {
   return 'http://localhost:3000';
 }
 
-/** Use the browser's actual host (www vs apex) for OAuth redirect_uri. */
+/** Use the browser's actual host (www vs apex). Prefer getOAuthAppUrl for OAuth. */
 export function getRequestOrigin(request: Request): string {
   const url = new URL(request.url);
   const host = (request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? url.host)
@@ -29,6 +29,18 @@ export function getRequestOrigin(request: Request): string {
     .split(',')[0]
     .trim();
   return `${proto}://${host}`;
+}
+
+/**
+ * Base URL for OAuth redirect_uri.
+ * Prefer NEXT_PUBLIC_APP_URL so Google Console only needs one stable URI.
+ * Falls back to the request host when the env var is unset (local / Codespaces).
+ */
+export function getOAuthAppUrl(request?: Request): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, '');
+  if (configured) return configured;
+  if (request) return getRequestOrigin(request);
+  return getAppUrl();
 }
 
 export function getOAuthCallbackUrl(provider: string, appUrl?: string): string {

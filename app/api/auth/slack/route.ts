@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getRequestOrigin } from '@/lib/app-url';
+import { getOAuthAppUrl } from '@/lib/app-url';
 import { OAUTH_COOKIE_OPTS } from '@/lib/oauth-cookies';
 import { getSlackAuthUrl, isSlackConfigured } from '@/lib/slack';
 import { getCurrentUser } from '@/lib/session';
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!user) redirect('/login?redirect=/settings');
   if (!isSlackConfigured()) redirect('/settings?error=slack-not-configured');
 
-  const origin = getRequestOrigin(request);
+  const origin = getOAuthAppUrl(request);
   const state = generateId() + generateId();
   const cookieStore = await cookies();
   cookieStore.set('slack-oauth-state', state, OAUTH_COOKIE_OPTS);

@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getRequestOrigin } from '@/lib/app-url';
+import { getOAuthAppUrl, getOAuthCallbackUrl } from '@/lib/app-url';
 import { getGmailAuthUrl, isGmailConfigured } from '@/lib/gmail';
 import { OAUTH_COOKIE_OPTS } from '@/lib/oauth-cookies';
 import { getCurrentUser } from '@/lib/session';
@@ -16,7 +16,11 @@ export async function GET(request: Request) {
     redirect('/settings?error=gmail-not-configured');
   }
 
-  const origin = getRequestOrigin(request);
+  // Stable redirect_uri from NEXT_PUBLIC_APP_URL (must match Google Cloud Console exactly)
+  const origin = getOAuthAppUrl(request);
+  const redirectUri = getOAuthCallbackUrl('gmail', origin);
+  console.info('[gmail-oauth] redirect_uri=', redirectUri);
+
   const state = generateId() + generateId();
   const cookieStore = await cookies();
   cookieStore.set('gmail-oauth-state', state, OAUTH_COOKIE_OPTS);
