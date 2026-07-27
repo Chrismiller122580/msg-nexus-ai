@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { fetchRecentGmailMessages, getValidAccessToken } from '@/lib/gmail';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
-import { syncErrorResult } from '@/lib/oauth-token';
+import { syncErrorResult, type SyncResult } from '@/lib/oauth-token';
 
 export async function ensureEmailConnectedAccount(userId: number, email: string) {
   await ensureConnectedAccount(userId, 'email', email, 'Gmail');
@@ -12,7 +12,7 @@ export async function ensureEmailConnectedAccount(userId: number, email: string)
 export async function syncGmailForUser(
   userId: number,
   limit = SYNC_BATCH_SIZE
-): Promise<{ imported: number; error?: string }> {
+): Promise<SyncResult> {
   try {
     const accessToken = await getValidAccessToken(userId);
     if (!accessToken) {

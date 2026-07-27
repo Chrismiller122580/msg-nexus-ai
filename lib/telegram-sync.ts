@@ -3,8 +3,12 @@ import { eq } from 'drizzle-orm';
 import { fetchTelegramUpdatesForChat } from '@/lib/telegram';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
+import type { SyncResult } from '@/lib/oauth-token';
 
-export async function syncTelegramForUser(userId: number, limit = SYNC_BATCH_SIZE) {
+export async function syncTelegramForUser(
+  userId: number,
+  limit = SYNC_BATCH_SIZE
+): Promise<SyncResult> {
   const db = getDb();
   const [conn] = await db.select().from(telegramConnections).where(eq(telegramConnections.userId, userId)).limit(1);
 

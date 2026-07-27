@@ -3,8 +3,12 @@ import { eq } from 'drizzle-orm';
 import { fetchRecentWhatsAppMessages, isWhatsAppConfigured } from '@/lib/whatsapp';
 import { phonesMatch } from '@/lib/phone';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
+import type { SyncResult } from '@/lib/oauth-token';
 
-export async function syncWhatsAppForUser(userId: number, limit = 25) {
+export async function syncWhatsAppForUser(
+  userId: number,
+  limit = 25
+): Promise<SyncResult> {
   if (!isWhatsAppConfigured()) {
     return { imported: 0, error: 'WhatsApp Business API is not configured on the server.' };
   }

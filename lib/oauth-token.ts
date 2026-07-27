@@ -109,11 +109,15 @@ export async function resolveAccessToken(options: {
   }
 }
 
-/** Map sync failures into a stable { imported, error } result. */
-export function syncErrorResult(err: unknown, fallback = 'Sync failed'): {
+/** Standard connector sync result. */
+export type SyncResult = {
   imported: number;
-  error: string;
-} {
+  error?: string;
+  info?: string;
+};
+
+/** Map sync failures into a stable { imported, error } result. */
+export function syncErrorResult(err: unknown, fallback = 'Sync failed'): SyncResult {
   if (isOAuthTokenError(err)) {
     return { imported: 0, error: err.message };
   }

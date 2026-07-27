@@ -3,12 +3,12 @@ import { eq } from 'drizzle-orm';
 import { fetchRecentOutlookMessages, getValidMicrosoftToken } from '@/lib/microsoft';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
-import { syncErrorResult } from '@/lib/oauth-token';
+import { syncErrorResult, type SyncResult } from '@/lib/oauth-token';
 
 export async function syncOutlookForUser(
   userId: number,
   limit = SYNC_BATCH_SIZE
-): Promise<{ imported: number; error?: string }> {
+): Promise<SyncResult> {
   try {
     const accessToken = await getValidMicrosoftToken(userId);
     if (!accessToken) {

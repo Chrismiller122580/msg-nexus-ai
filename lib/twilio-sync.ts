@@ -4,11 +4,12 @@ import { fetchTwilioMessagesForPhone, isTwilioConfigured } from '@/lib/twilio';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { saveSmsMessage } from '@/lib/sms-store';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
+import type { SyncResult } from '@/lib/oauth-token';
 
 export async function syncTwilioForUser(
   userId: number,
   limit = SYNC_BATCH_SIZE
-): Promise<{ imported: number; error?: string }> {
+): Promise<SyncResult> {
   if (!isTwilioConfigured()) {
     return { imported: 0, error: 'Twilio is not configured on the server.' };
   }

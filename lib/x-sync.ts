@@ -3,9 +3,12 @@ import { eq } from 'drizzle-orm';
 import { fetchRecentXDMs, getValidXToken } from '@/lib/x-api';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
-import { syncErrorResult } from '@/lib/oauth-token';
+import { syncErrorResult, type SyncResult } from '@/lib/oauth-token';
 
-export async function syncXForUser(userId: number, limit = SYNC_BATCH_SIZE) {
+export async function syncXForUser(
+  userId: number,
+  limit = SYNC_BATCH_SIZE
+): Promise<SyncResult> {
   try {
     const token = await getValidXToken(userId);
     if (!token) return { imported: 0, error: 'X is not connected.' };

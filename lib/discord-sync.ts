@@ -3,9 +3,12 @@ import { eq } from 'drizzle-orm';
 import { fetchRecentDiscordMessages, getValidDiscordToken } from '@/lib/discord';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
-import { syncErrorResult } from '@/lib/oauth-token';
+import { syncErrorResult, type SyncResult } from '@/lib/oauth-token';
 
-export async function syncDiscordForUser(userId: number, limit = SYNC_BATCH_SIZE) {
+export async function syncDiscordForUser(
+  userId: number,
+  limit = SYNC_BATCH_SIZE
+): Promise<SyncResult> {
   try {
     const token = await getValidDiscordToken(userId);
     if (!token) return { imported: 0, error: 'Discord is not connected.' };
