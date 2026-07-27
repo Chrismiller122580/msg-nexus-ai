@@ -56,6 +56,9 @@ export async function createStripeCheckoutSession(params: {
     client_reference_id: String(params.userId),
     'metadata[userId]': String(params.userId),
     'metadata[plan]': params.plan,
+    // Copy onto the subscription so renewal/cancel webhooks can resolve the user
+    'subscription_data[metadata][userId]': String(params.userId),
+    'subscription_data[metadata][plan]': params.plan,
   };
 
   const session = await stripeRequest<{ id: string; url: string }>(
