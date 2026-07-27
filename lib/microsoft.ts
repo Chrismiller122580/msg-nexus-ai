@@ -1,6 +1,7 @@
 import { getDb, outlookConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
+import { OAuthTokenError, resolveAccessToken } from '@/lib/oauth-token';
 
 const MICROSOFT_SCOPES = [
   'offline_access',
@@ -76,11 +77,14 @@ async function refreshMicrosoftToken(refreshToken: string) {
       grant_type: 'refresh_token',
     }),
   });
-  if (!res.ok) throw new Error('Failed to refresh Microsoft token');
+  if (!res.ok) throw new OAuthTokenError('Outlook', 'refresh_failed');
   return res.json() as Promise<{ access_token: string; expires_in: number; refresh_token?: string }>;
 }
 
-export async function getValidMicrosoftToken(userId: number): Promise<string | null> {
+export async function getValidMicrosoftToken(
+  userId: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<string | null> {
   const db = getDb();
   const [conn] = await db
     .select()
@@ -90,26 +94,24 @@ export async function getValidMicrosoftToken(userId: number): Promise<string | n
 
   if (!conn) return null;
 
-  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000) {
-    return conn.accessToken;
-  }
-
-  if (!conn.refreshToken) return conn.accessToken;
-
-  const refreshed = await refreshMicrosoftToken(conn.refreshToken);
-  const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
-
-  await db
-    .update(outlookConnections)
-    .set({
-      accessToken: refreshed.access_token,
-      expiresAt: newExpiresAt,
-      refreshToken: refreshed.refresh_token ?? conn.refreshToken,
-    })
-    .where(eq(outlookConnections.userId, userId));
-
-  return refreshed.access_token;
+  return resolveAccessToken({
+    provider: 'Outlook',
+    accessToken: conn.accessToken,
+    refreshToken: conn.refreshToken,
+    expiresAt: conn.expiresAt,
+    forceRefresh: opts?.forceRefresh,
+    refresh: () => refreshMicrosoftToken(conn.refreshToken!),
+    persist: async ({ accessToken, expiresAt, refreshToken }) => {
+      await db
+        .update(outlookConnections)
+        .set({
+          accessToken,
+          expiresAt,
+          refreshToken: refreshToken ?? conn.refreshToken,
+        })
+        .where(eq(outlookConnections.userId, userId));
+    },
+  });
 }
 
 interface GraphMessage {
@@ -144,34 +146,46 @@ export async function fetchRecentOutlookMessages(
   max = 50,
   since?: Date | null
 ) {
+  // Slightly rewind filter so boundary messages are included; ingest dedupes.
+  const sinceFilter = since
+    ? new Date(since.getTime() - 1000)
+    : null;
+
   const params = new URLSearchParams({
     $top: String(max),
     $orderby: 'receivedDateTime desc',
     $select: 'id,subject,bodyPreview,body,from,receivedDateTime',
   });
-  if (since) {
-    params.set('$filter', `receivedDateTime ge ${since.toISOString()}`);
+  if (sinceFilter) {
+    params.set('$filter', `receivedDateTime ge ${sinceFilter.toISOString()}`);
   }
 
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/me/messages?${params}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (res.status === 401) {
+    throw new OAuthTokenError('Outlook', 'expired');
+  }
   if (!res.ok) throw new Error('Failed to list Outlook messages');
 
   const data = await res.json() as { value?: GraphMessage[] };
   if (!data.value?.length) return [];
 
-  return data.value.map((msg) => {
-    const fromName = msg.from?.emailAddress?.name;
-    const fromAddr = msg.from?.emailAddress?.address;
-    const from = fromName && fromAddr ? `${fromName} <${fromAddr}>` : fromAddr || fromName || 'Unknown';
-    return {
-      externalId: msg.id,
-      from,
-      subject: msg.subject,
-      body: extractOutlookBody(msg),
-      timestamp: msg.receivedDateTime || new Date().toISOString(),
-    };
-  });
+  const sinceMs = since ? since.getTime() - 1000 : 0;
+
+  return data.value
+    .map((msg) => {
+      const fromName = msg.from?.emailAddress?.name;
+      const fromAddr = msg.from?.emailAddress?.address;
+      const from = fromName && fromAddr ? `${fromName} <${fromAddr}>` : fromAddr || fromName || 'Unknown';
+      return {
+        externalId: msg.id,
+        from,
+        subject: msg.subject,
+        body: extractOutlookBody(msg),
+        timestamp: msg.receivedDateTime || new Date().toISOString(),
+      };
+    })
+    .filter((m) => !sinceMs || new Date(m.timestamp).getTime() >= sinceMs);
 }

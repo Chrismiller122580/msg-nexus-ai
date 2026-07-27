@@ -11,17 +11,18 @@
 ## Phase 2: Real platform connectors (In progress)
 - **Shipped:** Gmail, Outlook, Twilio SMS (send + webhook + sync), Slack, Discord, Telegram, WhatsApp, X
 - **Shipped:** Admin portal, RBAC, Stripe billing, public API v1, UserLens UX auditor
-- **In progress:** Integration hardening (webhook automation, token refresh, sync limits)
+- **Shipped:** OAuth token refresh with reconnect errors; incremental sync via lastSyncedAt (Gmail/Outlook/Slack/Discord)
+- **In progress:** Webhook automation, harder sync limits, Gmail historyId cursors
 - **Remaining:** iMessage (Mac relay), Teams, Signal, additional platforms from [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
-- Threading, deduplication, incremental sync cursors
+- Threading, stronger cross-platform deduplication
 
 ## Phase 3: Polished app + intelligence (Started)
 - **Started:** Ask MsgNexus semantic Q&A panel in inbox
 - **Started:** PWA manifest for mobile install
+- **Shipped:** Mobile UI for user inbox/settings and admin drawer nav
 - Optional real LLM calls (xAI / Ollama) to improve parser + summaries
 - Full RAG chat over messages
 - Reminders, calendar export, rules engine
-- Mobile experience polish
-- CI + integration tests
+- CI + broader integration tests
 
 Contributions welcome — run the app with `npm run dev` and open an issue.

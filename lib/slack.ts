@@ -1,6 +1,11 @@
 import { getDb, slackConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
+import {
+  formatSlackOldest,
+  OAuthTokenError,
+  resolveAccessToken,
+} from '@/lib/oauth-token';
 
 const SLACK_SCOPES = ['channels:history', 'im:history', 'users:read', 'users:read.email'].join(',');
 
@@ -67,27 +72,40 @@ async function refreshSlackToken(refreshToken: string) {
     refresh_token?: string;
     expires_in?: number;
   };
-  if (!data.ok || !data.access_token) throw new Error('Failed to refresh Slack token');
+  if (!data.ok || !data.access_token) throw new OAuthTokenError('Slack', 'refresh_failed');
   return data;
 }
 
-export async function getValidSlackToken(userId: number): Promise<string | null> {
+export async function getValidSlackToken(
+  userId: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<string | null> {
   const db = getDb();
   const [conn] = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId)).limit(1);
   if (!conn) return null;
 
-  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000) return conn.accessToken;
-  if (!conn.refreshToken) return conn.accessToken;
-
-  const refreshed = await refreshSlackToken(conn.refreshToken);
-  await db.update(slackConnections).set({
-    accessToken: refreshed.access_token!,
-    refreshToken: refreshed.refresh_token ?? conn.refreshToken,
-    expiresAt: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000) : null,
-  }).where(eq(slackConnections.userId, userId));
-
-  return refreshed.access_token!;
+  return resolveAccessToken({
+    provider: 'Slack',
+    accessToken: conn.accessToken,
+    refreshToken: conn.refreshToken,
+    expiresAt: conn.expiresAt,
+    forceRefresh: opts?.forceRefresh,
+    refresh: async () => {
+      const refreshed = await refreshSlackToken(conn.refreshToken!);
+      return {
+        access_token: refreshed.access_token!,
+        expires_in: refreshed.expires_in,
+        refresh_token: refreshed.refresh_token,
+      };
+    },
+    persist: async ({ accessToken, expiresAt, refreshToken }) => {
+      await db.update(slackConnections).set({
+        accessToken,
+        refreshToken: refreshToken ?? conn.refreshToken,
+        expiresAt,
+      }).where(eq(slackConnections.userId, userId));
+    },
+  });
 }
 
 interface SlackMessage {
@@ -108,22 +126,47 @@ async function resolveSlackUserName(accessToken: string, userId: string): Promis
   return data.user.profile?.display_name || data.user.real_name || data.user.name || `Slack user ${userId}`;
 }
 
-export async function fetchRecentSlackMessages(accessToken: string, max = 50) {
+export async function fetchRecentSlackMessages(
+  accessToken: string,
+  max = 50,
+  since?: Date | null
+) {
   const channelsRes = await fetch('https://slack.com/api/conversations.list?types=im&limit=8', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const channelsData = await channelsRes.json() as { ok: boolean; channels?: Array<{ id: string }> };
+  const channelsData = await channelsRes.json() as {
+    ok: boolean;
+    error?: string;
+    channels?: Array<{ id: string }>;
+  };
+  if (channelsData.error === 'invalid_auth' || channelsData.error === 'token_revoked') {
+    throw new OAuthTokenError('Slack', 'expired');
+  }
   if (!channelsData.ok || !channelsData.channels?.length) return [];
 
   const results: Array<{ externalId: string; from: string; body: string; timestamp: string }> = [];
   const userNameCache = new Map<string, string>();
+  const oldest = since ? formatSlackOldest(new Date(since.getTime() - 1000)) : null;
 
   for (const ch of channelsData.channels.slice(0, 5)) {
+    const histParams = new URLSearchParams({
+      channel: ch.id,
+      limit: String(Math.ceil(max / 5)),
+    });
+    if (oldest) histParams.set('oldest', oldest);
+
     const histRes = await fetch(
-      `https://slack.com/api/conversations.history?channel=${ch.id}&limit=${Math.ceil(max / 5)}`,
+      `https://slack.com/api/conversations.history?${histParams}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    const hist = await histRes.json() as { ok: boolean; messages?: SlackMessage[] };
+    const hist = await histRes.json() as {
+      ok: boolean;
+      error?: string;
+      messages?: SlackMessage[];
+    };
+    if (hist.error === 'invalid_auth' || hist.error === 'token_revoked') {
+      throw new OAuthTokenError('Slack', 'expired');
+    }
     if (!hist.ok || !hist.messages) continue;
 
     for (const m of hist.messages) {

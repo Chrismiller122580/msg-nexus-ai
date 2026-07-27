@@ -2,6 +2,7 @@ import { getDb, xConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import crypto from 'crypto';
+import { OAuthTokenError, resolveAccessToken } from '@/lib/oauth-token';
 
 const X_SCOPES = ['dm.read', 'tweet.read', 'users.read', 'offline.access'].join(' ');
 
@@ -69,27 +70,33 @@ async function refreshXToken(refreshToken: string) {
       grant_type: 'refresh_token',
     }),
   });
-  if (!res.ok) throw new Error('Failed to refresh X token');
+  if (!res.ok) throw new OAuthTokenError('X', 'refresh_failed');
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>;
 }
 
-export async function getValidXToken(userId: number): Promise<string | null> {
+export async function getValidXToken(
+  userId: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<string | null> {
   const db = getDb();
   const [conn] = await db.select().from(xConnections).where(eq(xConnections.userId, userId)).limit(1);
   if (!conn) return null;
 
-  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000) return conn.accessToken;
-  if (!conn.refreshToken) return conn.accessToken;
-
-  const refreshed = await refreshXToken(conn.refreshToken);
-  await db.update(xConnections).set({
-    accessToken: refreshed.access_token,
-    refreshToken: refreshed.refresh_token,
-    expiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
-  }).where(eq(xConnections.userId, userId));
-
-  return refreshed.access_token;
+  return resolveAccessToken({
+    provider: 'X',
+    accessToken: conn.accessToken,
+    refreshToken: conn.refreshToken,
+    expiresAt: conn.expiresAt,
+    forceRefresh: opts?.forceRefresh,
+    refresh: () => refreshXToken(conn.refreshToken!),
+    persist: async ({ accessToken, expiresAt, refreshToken }) => {
+      await db.update(xConnections).set({
+        accessToken,
+        refreshToken: refreshToken ?? conn.refreshToken,
+        expiresAt,
+      }).where(eq(xConnections.userId, userId));
+    },
+  });
 }
 
 export async function fetchRecentXDMs(accessToken: string, max = 20) {

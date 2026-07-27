@@ -5,17 +5,17 @@
 Phase 1 MVP — unified inbox demo with Postgres-backed persistence.
 
 ## Features
-- **Unified Inbox** — Messages from 8 platforms (WhatsApp, Email, Slack, SMS, Telegram, X, Discord, iMessage) in one beautiful feed. SMS via Twilio when configured; others support real OAuth/webhook connectors or simulated demo data.
+- **Unified Inbox** — Messages from WhatsApp, Email, Slack, SMS, Telegram, X, and Discord in one feed. Real OAuth/webhook connectors when env is configured (iMessage planned).
 - **Smart Semantic Search** — Type natural queries like "netflix", "rent due", "amazon order", or "$15". Uses a local hybrid keyword + concept-vector engine (no external AI API keys).
-- **Local AI Parser** — One-click (or automatic) analysis that extracts:
+- **Local AI Parser** — One-click (or bulk) analysis that extracts:
   - Category (subscription / bill / shopping / other)
   - Amount, vendor, due date, recurring flag
   - Human-readable summary + entities
-- **Pulse Dashboard** — Live aggregates: monthly recurring spend, upcoming bills total, subscription list, recent shopping. Switch between Inbox ↔ Pulse.
-- **Fully Interactive** — Add simulated incoming messages, re-analyze, delete, export/import your entire dataset as JSON, reset to demo seeds.
+- **Pulse Dashboard** — Live aggregates: monthly recurring spend, upcoming bills total, subscription list. Switch between Inbox ↔ Pulse.
+- **Sync + export** — Incremental connector sync with OAuth token refresh, export JSON, clear data.
 - **Multi-account support** — Connect multiple accounts per platform (e.g. two Gmails, two phone numbers).
 - **Magic link auth** — Passwordless email sign-in (Resend in production, dev link locally).
-- **Gmail integration** — OAuth connect + sync real emails into your inbox with AI parsing.
+- **Admin portal** — Users, billing, connections, audit, API keys, UserLens UX scans.
 
 ## Quick Start
 
@@ -33,11 +33,11 @@ Open http://localhost:3000.
 
 ### New user flow
 1. **Homepage** (`/`) — Landing with hero and feature highlights
-2. **Login** (`/login`) — Magic link, demo sign-in, or demo account button
-3. **Onboarding** (`/onboarding`) — Connect messaging apps (multiple accounts per platform)
-4. **Inbox** (`/inbox`) — Full MsgNexus.AI experience, filtered to your connected platforms
+2. **Login** (`/login`) — Magic-link email sign-in
+3. **Settings** (`/settings`) — Connect messaging apps and billing
+4. **Inbox** (`/inbox`) — Unified feed filtered to your connected platforms
 
-Keyboard shortcuts: `/` focuses search, `⌘A` / `Ctrl+A` opens the "Add message" composer, `Esc` closes panels/modals.
+Keyboard shortcuts: `/` focuses search, `Esc` closes panels/modals.
 
 See [SETUP.md](SETUP.md) for more.
 

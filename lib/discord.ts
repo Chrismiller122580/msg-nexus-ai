@@ -1,6 +1,11 @@
 import { getDb, discordConnections } from '@/db';
 import { eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
+import {
+  discordSnowflakeAfter,
+  OAuthTokenError,
+  resolveAccessToken,
+} from '@/lib/oauth-token';
 
 const DISCORD_SCOPES = ['identify', 'guilds', 'dm_channels.read'].join(' ');
 
@@ -55,42 +60,59 @@ async function refreshDiscordToken(refreshToken: string) {
       refresh_token: refreshToken,
     }),
   });
-  if (!res.ok) throw new Error('Failed to refresh Discord token');
+  if (!res.ok) throw new OAuthTokenError('Discord', 'refresh_failed');
   return res.json() as Promise<{ access_token: string; refresh_token: string; expires_in: number }>;
 }
 
-export async function getValidDiscordToken(userId: number): Promise<string | null> {
+export async function getValidDiscordToken(
+  userId: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<string | null> {
   const db = getDb();
   const [conn] = await db.select().from(discordConnections).where(eq(discordConnections.userId, userId)).limit(1);
   if (!conn) return null;
 
-  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000) return conn.accessToken;
-  if (!conn.refreshToken) return conn.accessToken;
-
-  const refreshed = await refreshDiscordToken(conn.refreshToken);
-  await db.update(discordConnections).set({
-    accessToken: refreshed.access_token,
-    refreshToken: refreshed.refresh_token,
-    expiresAt: new Date(Date.now() + refreshed.expires_in * 1000),
-  }).where(eq(discordConnections.userId, userId));
-
-  return refreshed.access_token;
+  return resolveAccessToken({
+    provider: 'Discord',
+    accessToken: conn.accessToken,
+    refreshToken: conn.refreshToken,
+    expiresAt: conn.expiresAt,
+    forceRefresh: opts?.forceRefresh,
+    refresh: () => refreshDiscordToken(conn.refreshToken!),
+    persist: async ({ accessToken, expiresAt, refreshToken }) => {
+      await db.update(discordConnections).set({
+        accessToken,
+        refreshToken: refreshToken ?? conn.refreshToken,
+        expiresAt,
+      }).where(eq(discordConnections.userId, userId));
+    },
+  });
 }
 
-export async function fetchRecentDiscordMessages(accessToken: string, max = 20) {
+export async function fetchRecentDiscordMessages(
+  accessToken: string,
+  max = 20,
+  since?: Date | null
+) {
   const channelsRes = await fetch('https://discord.com/api/users/@me/channels', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+  if (channelsRes.status === 401) throw new OAuthTokenError('Discord', 'expired');
   if (!channelsRes.ok) return [];
 
   const channels = await channelsRes.json() as Array<{ id: string; recipients?: Array<{ username: string }> }>;
   const results: Array<{ externalId: string; from: string; body: string; timestamp: string }> = [];
+  const after = since ? discordSnowflakeAfter(new Date(since.getTime() - 1000)) : null;
 
   for (const ch of channels.slice(0, 3)) {
-    const msgRes = await fetch(`https://discord.com/api/channels/${ch.id}/messages?limit=${Math.ceil(max / 3)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const params = new URLSearchParams({ limit: String(Math.ceil(max / 3)) });
+    if (after) params.set('after', after);
+
+    const msgRes = await fetch(
+      `https://discord.com/api/channels/${ch.id}/messages?${params}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (msgRes.status === 401) throw new OAuthTokenError('Discord', 'expired');
     if (!msgRes.ok) continue;
     const messages = await msgRes.json() as Array<{ id: string; content: string; timestamp: string; author?: { username: string } }>;
     for (const m of messages) {

@@ -1,7 +1,12 @@
 import { getDb, gmailConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { getAppUrl, getOAuthCallbackUrl } from '@/lib/app-url';
+import { getOAuthCallbackUrl } from '@/lib/app-url';
 import { getGoogleClientSecret, isGoogleOAuthConfigured } from '@/lib/google-oauth';
+import {
+  formatGmailAfterQuery,
+  OAuthTokenError,
+  resolveAccessToken,
+} from '@/lib/oauth-token';
 
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -70,11 +75,16 @@ async function refreshAccessToken(refreshToken: string) {
       grant_type: 'refresh_token',
     }),
   });
-  if (!res.ok) throw new Error('Failed to refresh Gmail token');
+  if (!res.ok) {
+    throw new OAuthTokenError('Gmail', 'refresh_failed');
+  }
   return res.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
-export async function getValidAccessToken(userId: number): Promise<string | null> {
+export async function getValidAccessToken(
+  userId: number,
+  opts?: { forceRefresh?: boolean }
+): Promise<string | null> {
   const db = getDb();
   const [conn] = await db
     .select()
@@ -84,22 +94,20 @@ export async function getValidAccessToken(userId: number): Promise<string | null
 
   if (!conn) return null;
 
-  const expiresAt = conn.expiresAt ? new Date(conn.expiresAt).getTime() : 0;
-  if (expiresAt > Date.now() + 60_000) {
-    return conn.accessToken;
-  }
-
-  if (!conn.refreshToken) return conn.accessToken;
-
-  const refreshed = await refreshAccessToken(conn.refreshToken);
-  const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
-
-  await db
-    .update(gmailConnections)
-    .set({ accessToken: refreshed.access_token, expiresAt: newExpiresAt })
-    .where(eq(gmailConnections.userId, userId));
-
-  return refreshed.access_token;
+  return resolveAccessToken({
+    provider: 'Gmail',
+    accessToken: conn.accessToken,
+    refreshToken: conn.refreshToken,
+    expiresAt: conn.expiresAt,
+    forceRefresh: opts?.forceRefresh,
+    refresh: () => refreshAccessToken(conn.refreshToken!),
+    persist: async ({ accessToken, expiresAt }) => {
+      await db
+        .update(gmailConnections)
+        .set({ accessToken, expiresAt })
+        .where(eq(gmailConnections.userId, userId));
+    },
+  });
 }
 
 interface GmailMessageList {
@@ -131,30 +139,27 @@ function extractBody(payload: GmailMessagePayload['payload']): string {
   return '';
 }
 
-function formatGmailAfter(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `after:${y}/${m}/${d}`;
-}
-
 export async function fetchRecentGmailMessages(
   accessToken: string,
   max = 50,
   since?: Date | null
 ) {
   const params = new URLSearchParams({ maxResults: String(max) });
-  if (since) params.set('q', formatGmailAfter(since));
+  if (since) params.set('q', formatGmailAfterQuery(since));
 
   const listRes = await fetch(
     `https://www.googleapis.com/gmail/v1/users/me/messages?${params}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (listRes.status === 401) {
+    throw new OAuthTokenError('Gmail', 'expired');
+  }
   if (!listRes.ok) throw new Error('Failed to list Gmail messages');
 
   const list = (await listRes.json()) as GmailMessageList;
   if (!list.messages?.length) return [];
 
+  const sinceMs = since ? since.getTime() - 1000 : 0;
   const results = [];
   for (const item of list.messages) {
     const msgRes = await fetch(
@@ -168,15 +173,18 @@ export async function fetchRecentGmailMessages(
     const from = headers.find((h) => h.name === 'From')?.value || 'Unknown';
     const subject = headers.find((h) => h.name === 'Subject')?.value;
     const body = extractBody(msg.payload).trim().slice(0, 4000);
+    const timestamp = msg.internalDate
+      ? new Date(Number(msg.internalDate)).toISOString()
+      : new Date().toISOString();
+
+    if (sinceMs && new Date(timestamp).getTime() < sinceMs) continue;
 
     results.push({
       externalId: msg.id,
       from,
       subject,
       body: body || subject || '(empty message)',
-      timestamp: msg.internalDate
-        ? new Date(Number(msg.internalDate)).toISOString()
-        : new Date().toISOString(),
+      timestamp,
     });
   }
 
