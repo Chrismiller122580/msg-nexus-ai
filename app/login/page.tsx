@@ -52,24 +52,24 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="flex items-center justify-between p-6">
-        <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+      <div className="flex items-center justify-between p-4 sm:p-6 safe-area-top">
+        <Link href="/" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground min-h-[44px]">
           <ArrowLeft size={16} /> Back to home
         </Link>
         <ThemeToggle />
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="inline-block mb-6">
               <MsgNexusLogo size="md" href="/" />
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight">Welcome back</h1>
-            <p className="text-muted-foreground mt-2">We&apos;ll email you a secure sign-in link</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Welcome back</h1>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base">We&apos;ll email you a secure sign-in link</p>
           </div>
 
-          <div className="card p-8">
+          <div className="card p-5 sm:p-8">
             {magicSent ? (
               <div className="space-y-4 text-center">
                 <p className="text-sm">

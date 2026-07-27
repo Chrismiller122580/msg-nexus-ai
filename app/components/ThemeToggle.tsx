@@ -58,7 +58,7 @@ export function ThemeToggle() {
   if (!mounted) {
     // Render the same as server to prevent hydration mismatch
     return (
-      <button className="btn btn-ghost p-2" aria-label="Toggle theme">
+      <button className="btn btn-ghost p-2 min-h-[44px] min-w-[44px]" aria-label="Toggle theme">
         <Monitor size={16} />
       </button>
     );
@@ -77,7 +77,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={cycleTheme}
-      className="btn btn-ghost p-2"
+      className="btn btn-ghost p-2 min-h-[44px] min-w-[44px]"
       aria-label={label}
       title={label}
     >

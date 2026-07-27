@@ -128,21 +128,21 @@ export function AdminUserlensClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <ScanEye size={24} className="text-accent" /> UserLens
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
+            <ScanEye size={24} className="text-accent shrink-0" /> UserLens
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Live UX auditor — accessibility, performance, mobile journeys, Composer-ready fixes
           </p>
         </div>
-        <button onClick={refresh} className="btn btn-secondary text-sm flex items-center gap-2">
+        <button onClick={refresh} className="btn btn-secondary text-sm flex items-center gap-2 min-h-[44px] w-full sm:w-auto shrink-0">
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="card p-5">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             <TrendingUp size={14} /> Avg UX Score
@@ -222,11 +222,11 @@ export function AdminUserlensClient({
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      <div className="card overflow-x-auto">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold">Scan history</h2>
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[720px]">
           <thead className="bg-muted/50">
             <tr className="text-left text-muted-foreground">
               <th className="p-3">Time</th>

@@ -131,26 +131,27 @@ export default function SettingsClient() {
   const webhookBase = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 h-16 flex items-center justify-between max-w-3xl mx-auto w-full">
+    <div className="min-h-screen bg-background overflow-x-hidden">
+      <header className="border-b border-border px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between max-w-3xl mx-auto w-full safe-area-top">
         <MsgNexusLogo href="/inbox" />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {isStaff && (
-            <Link href="/admin" className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent">
-              <Shield size={15} /> Admin
+            <Link href="/admin" className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent min-h-[44px] min-w-[44px] px-2 sm:px-4">
+              <Shield size={15} />
+              <span className="hidden sm:inline">Admin</span>
             </Link>
           )}
           <ThemeToggle />
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-6 py-10">
-        <Link href="/inbox" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8">
+      <div className="max-w-3xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
+        <Link href="/inbox" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 sm:mb-8 min-h-[44px]">
           <ArrowLeft size={16} /> Back to inbox
         </Link>
 
         {searchParams.get('welcome') === '1' && (
-          <div className="card p-5 mb-8 border-accent/30 bg-accent/5">
+          <div className="card p-4 sm:p-5 mb-6 sm:mb-8 border-accent/30 bg-accent/5">
             <h2 className="font-semibold mb-1">Welcome to MsgNexus</h2>
             <p className="text-sm text-muted-foreground">
               Connect the apps you use below. Once connected, sync to pull messages into your unified inbox.
@@ -158,10 +159,10 @@ export default function SettingsClient() {
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight mb-2">Integrations</h1>
-            <p className="text-muted-foreground">Connect your messaging apps · {userEmail}</p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Integrations</h1>
+            <p className="text-muted-foreground text-sm sm:text-base break-words">Connect your messaging apps · {userEmail}</p>
           </div>
           <button onClick={async () => {
             setSyncingAll(true);
@@ -185,14 +186,14 @@ export default function SettingsClient() {
               }
               await reload();
             } finally { setSyncingAll(false); }
-          }} disabled={syncingAll} className="btn btn-primary text-sm disabled:opacity-70">
+          }} disabled={syncingAll} className="btn btn-primary text-sm disabled:opacity-70 min-h-[44px] w-full sm:w-auto shrink-0">
             {syncingAll ? <><Loader2 className="animate-spin" size={16} /> Syncing...</> : <><RefreshCw size={16} /> Sync all</>}
           </button>
         </div>
 
-        <div className="card p-5 mb-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
+        <div className="card p-4 sm:p-5 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="min-w-0">
               <h2 className="font-semibold flex items-center gap-2"><CreditCard size={18} /> Billing</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 Current plan: <span className="capitalize font-medium text-foreground">{billing.plan}</span>
@@ -260,9 +261,9 @@ export default function SettingsClient() {
             status={xPlatform} connectHref="/api/auth/x" onSync={() => runSync('x', syncXAction)}
             syncing={syncing.x} onDisconnect={async () => { await disconnectXAction(); await reload(); toast.success('Disconnected'); }} />
 
-          <div className="card p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center">
+          <div className="card p-4 sm:p-6 space-y-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center shrink-0">
                 <Smartphone className="text-emerald-500" size={20} />
               </div>
               <div>
@@ -346,9 +347,9 @@ export default function SettingsClient() {
             onDisconnect={async () => { await disconnectWhatsAppAction(); await reload(); toast.success('Disconnected'); }}
             webhookUrl={`${webhookBase}/api/webhooks/whatsapp`} />
 
-          <div className="card p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 flex items-center justify-center">
+          <div className="card p-4 sm:p-6 space-y-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 flex items-center justify-center shrink-0">
                 <Send className="text-cyan-500" size={20} />
               </div>
               <div>
@@ -405,10 +406,10 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
   }, [callbackPath]);
 
   return (
-    <div className="card p-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center">{icon}</div>
-        <div><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">OAuth connect + sync</p></div>
+    <div className="card p-4 sm:p-6 space-y-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center shrink-0">{icon}</div>
+        <div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">OAuth connect + sync</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
       {callbackUrl && oauthProviderLabel && (
@@ -442,10 +443,10 @@ function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSy
   onConnect: () => void; onSync: () => void; syncing?: boolean; onDisconnect: () => void; webhookUrl: string;
 }) {
   return (
-    <div className="card p-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center">{icon}</div>
-        <div><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">Phone + webhook</p></div>
+    <div className="card p-4 sm:p-6 space-y-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center shrink-0">{icon}</div>
+        <div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">Phone + webhook</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
       {status.connected ? (

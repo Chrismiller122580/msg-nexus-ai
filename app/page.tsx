@@ -23,44 +23,45 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Nav */}
-      <nav className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <nav className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-50 safe-area-top">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
             <MsgNexusLogo href="/" />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
             <ThemeToggle />
-            <Link 
-              href="/login" 
-              className="btn btn-ghost text-sm"
+            <Link
+              href="/login"
+              className="btn btn-ghost text-sm min-h-[40px] px-2 sm:px-4"
             >
               Log in
             </Link>
-            <Link 
-              href="/login" 
-              className="btn btn-primary text-sm"
+            <Link
+              href="/login"
+              className="btn btn-primary text-sm min-h-[40px] px-3 sm:px-4"
             >
-              Get started free
+              <span className="sm:hidden">Start</span>
+              <span className="hidden sm:inline">Get started free</span>
             </Link>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
-      <div className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-sm mb-6 text-muted-foreground">
           <Zap size={14} /> Unified messaging, one inbox
         </div>
 
-        <h1 className="text-6xl md:text-7xl font-semibold tracking-tighter mb-6">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-semibold tracking-tighter mb-6">
           Unify all your<br />messaging.<br />
           <span className="bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
             AI that actually helps.
           </span>
         </h1>
 
-        <p className="max-w-2xl mx-auto text-xl text-muted-foreground mb-10">
+        <p className="max-w-2xl mx-auto text-base sm:text-xl text-muted-foreground mb-8 sm:mb-10">
           One inbox for WhatsApp, Email, Slack, SMS, Telegram, X, and Discord.
           Semantic search. Automatic detection of bills, subscriptions, and shopping.
         </p>
@@ -86,7 +87,7 @@ export default function HomePage() {
       </div>
 
       {/* Platform logos / preview */}
-      <div className="max-w-5xl mx-auto px-6 pb-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-12 sm:pb-16">
         <div className="text-center mb-6 text-sm uppercase tracking-widest text-muted-foreground">
           Connect to the platforms you already use
         </div>
@@ -107,9 +108,9 @@ export default function HomePage() {
       </div>
 
       {/* Features */}
-      <div id="features" className="border-t border-border bg-muted/30 py-16">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-6">
+      <div id="features" className="border-t border-border bg-muted/30 py-12 sm:py-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             <div className="card p-6">
               <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center mb-4">
                 <MessageSquare className="text-indigo-500" size={22} />
@@ -147,11 +148,11 @@ export default function HomePage() {
       </div>
 
       {/* Trust / Privacy */}
-      <div className="max-w-5xl mx-auto px-6 py-16 text-center">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center">
         <div className="inline-flex items-center gap-2 text-sm text-muted-foreground mb-4">
           <Shield size={16} /> Privacy first
         </div>
-        <h2 className="text-3xl font-semibold tracking-tight mb-3">Your data stays yours.</h2>
+        <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-3">Your data stays yours.</h2>
         <p className="max-w-md mx-auto text-muted-foreground">
           Your messages and insights are stored securely. Export your data anytime.
         </p>

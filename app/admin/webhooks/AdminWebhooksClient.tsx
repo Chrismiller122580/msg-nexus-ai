@@ -92,8 +92,8 @@ export function AdminWebhooksClient({
         </div>
       )}
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-muted/50">
             <tr className="text-left text-muted-foreground">
               <th className="p-3">Name</th>

@@ -33,7 +33,7 @@ export function MsgNexusLogo({
         MN
       </div>
       {showText && (
-        <span className={cn('font-semibold tracking-tight', styles.text)}>
+        <span className={cn('font-semibold tracking-tight truncate', styles.text)}>
           MsgNexus<span className="text-muted-foreground">.AI</span>
         </span>
       )}

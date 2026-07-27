@@ -48,6 +48,42 @@ body {
   font-family: var(--font-geist-sans);
   background-color: var(--background);
   color: var(--foreground);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe areas for notched phones / PWA */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-inset {
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Prevent accidental horizontal scroll on mobile */
+html {
+  overflow-x: hidden;
+}
+
+/* Comfortable touch targets on interactive primitives */
+@media (max-width: 640px) {
+  .btn {
+    min-height: 2.5rem;
+  }
+
+  .search-input {
+    font-size: 1rem; /* avoids iOS zoom on focus */
+  }
+
+  .message-card {
+    padding: 0.875rem;
+  }
 }
 
 /* Themed component primitives */
