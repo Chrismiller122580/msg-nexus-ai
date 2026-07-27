@@ -150,7 +150,7 @@ export function formatSlackOldest(since: Date): string {
 export function discordSnowflakeAfter(since: Date): string {
   const DISCORD_EPOCH = 1_420_070_400_000;
   const ms = Math.max(0, since.getTime() - DISCORD_EPOCH);
-  // snowflake = (ms << 22)
-  const id = BigInt(ms) << 22n;
+  // snowflake = (ms << 22) — avoid BigInt literals for broader TS targets
+  const id = BigInt(ms) << BigInt(22);
   return id.toString();
 }

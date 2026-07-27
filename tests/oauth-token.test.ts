@@ -34,7 +34,7 @@ describe('oauth-token helpers', () => {
     const d = new Date('2020-01-01T00:00:00.000Z');
     const snowflake = discordSnowflakeAfter(d);
     assert.match(snowflake, /^\d+$/);
-    assert.ok(BigInt(snowflake) > 0n);
+    assert.ok(BigInt(snowflake) > BigInt(0));
   });
 
   it('resolveAccessToken returns fresh token without refresh', async () => {
