@@ -43,6 +43,26 @@ export async function GET(request: Request) {
         configured: isMicrosoftConfigured(),
         callbackUrl: getOAuthCallbackUrl('microsoft', oauthOrigin),
         env: ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_TENANT_ID'],
+        tenant: process.env.MICROSOFT_TENANT_ID?.trim() || 'common',
+        azurePortal: {
+          platform: 'Web',
+          redirectUris: [
+            getOAuthCallbackUrl('microsoft', oauthOrigin),
+            'https://www.msgnexus.ai/api/auth/microsoft/callback',
+            'https://msgnexus.ai/api/auth/microsoft/callback',
+          ].filter((v, i, a) => a.indexOf(v) === i),
+          supportedAccountTypes:
+            'Accounts in any organizational directory and personal Microsoft accounts',
+          delegatedPermissions: [
+            'offline_access',
+            'openid',
+            'profile',
+            'email',
+            'User.Read',
+            'Mail.Read',
+          ],
+          note: 'Redirect URI must match exactly (including www). Grant admin consent for work tenants if Mail.Read is blocked.',
+        },
       },
       slack: {
         configured: isSlackConfigured(),

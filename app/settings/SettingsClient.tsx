@@ -116,8 +116,13 @@ export default function SettingsClient() {
     const connected = ['gmail', 'outlook', 'slack', 'discord', 'telegram', 'whatsapp', 'x'];
     for (const key of connected) {
       if (searchParams.get(key) === 'connected') {
-        // Gmail may include a more specific imported/error toast below
-        if (!(key === 'gmail' && (searchParams.get('imported') || searchParams.get('error') === 'gmail-sync-failed'))) {
+        // Gmail/Outlook may include a more specific imported/error toast below
+        const hasSpecific =
+          (key === 'gmail' &&
+            (searchParams.get('imported') || searchParams.get('error') === 'gmail-sync-failed')) ||
+          (key === 'outlook' &&
+            (searchParams.get('imported') || searchParams.get('error') === 'outlook-sync-failed'));
+        if (!hasSpecific) {
           toast.success(`${key.charAt(0).toUpperCase() + key.slice(1)} connected`);
         }
         reload();
@@ -129,6 +134,7 @@ export default function SettingsClient() {
       'gmail-sync-failed': 'Gmail connected, but import failed',
       'outlook-not-configured': 'Outlook OAuth not configured',
       'outlook-auth-failed': 'Outlook authorization failed',
+      'outlook-sync-failed': 'Outlook connected, but import failed',
       'slack-not-configured': 'Slack OAuth not configured',
       'slack-auth-failed': 'Slack authorization failed',
       'discord-not-configured': 'Discord OAuth not configured',
@@ -144,6 +150,9 @@ export default function SettingsClient() {
     const imported = searchParams.get('imported');
     if (imported && searchParams.get('gmail') === 'connected') {
       toast.success(`Gmail connected — imported ${imported} email${imported === '1' ? '' : 's'}`);
+    }
+    if (imported && searchParams.get('outlook') === 'connected') {
+      toast.success(`Outlook connected — imported ${imported} email${imported === '1' ? '' : 's'}`);
     }
     if (searchParams.get('billing') === 'success') toast.success('Subscription updated');
     if (searchParams.get('billing') === 'cancelled') toast.info('Checkout cancelled');
@@ -285,13 +294,34 @@ export default function SettingsClient() {
             syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }}
             extraHelp={
               <div className="text-xs text-muted-foreground space-y-1.5 rounded-xl border border-border p-3">
-                <p className="font-medium text-foreground">If Microsoft asks for an admin account</p>
+                <p className="font-medium text-foreground">Azure setup checklist</p>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Azure app → Authentication → allow <strong>personal Microsoft accounts</strong> (or “any org + personal”).</li>
-                  <li>Redirect URI (Web): <code className="bg-muted px-1 rounded break-all">{webhookBase}/api/auth/microsoft/callback</code></li>
-                  <li>API permissions: <code className="bg-muted px-1 rounded">Mail.Read</code>, <code className="bg-muted px-1 rounded">User.Read</code>, <code className="bg-muted px-1 rounded">offline_access</code> (delegated).</li>
-                  <li>Work/school only: an admin must grant consent once (Enterprise apps → Admin consent).</li>
-                  <li>Personal Hotmail/Outlook.com: sign in with that Microsoft account, not a work admin.</li>
+                  <li>
+                    Redirect URI (Web) must match server exactly:{' '}
+                    <code className="bg-muted px-1 rounded break-all">
+                      https://www.msgnexus.ai/api/auth/microsoft/callback
+                    </code>
+                  </li>
+                  <li>
+                    Also add Codespace/local if testing there:{' '}
+                    <code className="bg-muted px-1 rounded break-all">
+                      {webhookBase}/api/auth/microsoft/callback
+                    </code>
+                  </li>
+                  <li>
+                    Supported account types: <strong>Accounts in any org + personal Microsoft accounts</strong>{' '}
+                    (or personal only with <code className="bg-muted px-1 rounded">MICROSOFT_TENANT_ID=consumers</code>).
+                  </li>
+                  <li>
+                    API permissions (delegated): <code className="bg-muted px-1 rounded">Mail.Read</code>,{' '}
+                    <code className="bg-muted px-1 rounded">User.Read</code>,{' '}
+                    <code className="bg-muted px-1 rounded">offline_access</code>,{' '}
+                    <code className="bg-muted px-1 rounded">openid</code>,{' '}
+                    <code className="bg-muted px-1 rounded">profile</code>,{' '}
+                    <code className="bg-muted px-1 rounded">email</code>.
+                  </li>
+                  <li>Work/school: admin may need to grant consent once.</li>
+                  <li>Personal Hotmail/Outlook.com: sign in with that Microsoft account (not a work admin).</li>
                 </ul>
               </div>
             }

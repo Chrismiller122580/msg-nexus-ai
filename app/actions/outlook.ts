@@ -39,7 +39,12 @@ export async function disconnectOutlookAction() {
   return { success: true };
 }
 
-export async function syncOutlookAction(): Promise<{ success?: boolean; error?: string; imported?: number }> {
+export async function syncOutlookAction(): Promise<{
+  success?: boolean;
+  error?: string;
+  info?: string;
+  imported?: number;
+}> {
   try {
     const user = await requireUser();
     const result = await syncOutlookForUser(user.id);
@@ -47,7 +52,7 @@ export async function syncOutlookAction(): Promise<{ success?: boolean; error?: 
 
     revalidatePath('/inbox');
     revalidatePath('/settings');
-    return { success: true, imported: result.imported };
+    return { success: true, imported: result.imported, info: result.info };
   } catch (err: unknown) {
     console.error('syncOutlookAction error:', err);
     return { error: err instanceof Error ? err.message : 'Outlook sync failed' };

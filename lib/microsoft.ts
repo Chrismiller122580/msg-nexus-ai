@@ -13,7 +13,30 @@ const MICROSOFT_SCOPES = [
 ].join(' ');
 
 export function isMicrosoftConfigured(): boolean {
-  return Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET);
+  return Boolean(
+    process.env.MICROSOFT_CLIENT_ID?.trim() && process.env.MICROSOFT_CLIENT_SECRET?.trim()
+  );
+}
+
+async function microsoftApiError(res: Response, fallback: string): Promise<Error> {
+  let detail = '';
+  try {
+    const body = (await res.json()) as {
+      error?: string | { message?: string; code?: string };
+      error_description?: string;
+    };
+    if (typeof body.error === 'string') {
+      detail = body.error_description || body.error;
+    } else if (body.error?.message) {
+      detail = body.error.message;
+    } else if (body.error_description) {
+      detail = body.error_description;
+    }
+  } catch {
+    /* ignore */
+  }
+  const suffix = detail ? `: ${detail}` : ` (HTTP ${res.status})`;
+  return new Error(`${fallback}${suffix}`);
 }
 
 /**
@@ -51,21 +74,22 @@ export function getMicrosoftAdminConsentUrl(appUrl?: string): string {
 
 export async function exchangeMicrosoftCode(code: string, appUrl?: string) {
   const redirectUri = getOAuthCallbackUrl('microsoft', appUrl);
-  const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
+  const tenant = process.env.MICROSOFT_TENANT_ID?.trim() || 'common';
   const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id: process.env.MICROSOFT_CLIENT_ID!,
-      client_secret: process.env.MICROSOFT_CLIENT_SECRET!,
+      client_id: process.env.MICROSOFT_CLIENT_ID!.trim(),
+      client_secret: process.env.MICROSOFT_CLIENT_SECRET!.trim(),
       code,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
+      scope: MICROSOFT_SCOPES,
     }),
   });
 
   if (!res.ok) {
-    throw new Error('Failed to exchange Microsoft authorization code');
+    throw await microsoftApiError(res, 'Failed to exchange Microsoft authorization code');
   }
 
   return res.json() as Promise<{
@@ -79,7 +103,7 @@ export async function getMicrosoftProfile(accessToken: string) {
   const res = await fetch('https://graph.microsoft.com/v1.0/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error('Failed to fetch Microsoft profile');
+  if (!res.ok) throw await microsoftApiError(res, 'Failed to fetch Microsoft profile');
   const data = await res.json() as { mail?: string; userPrincipalName?: string };
   return { email: data.mail || data.userPrincipalName || 'outlook@user' };
 }
@@ -166,9 +190,7 @@ export async function fetchRecentOutlookMessages(
   since?: Date | null
 ) {
   // Slightly rewind filter so boundary messages are included; ingest dedupes.
-  const sinceFilter = since
-    ? new Date(since.getTime() - 1000)
-    : null;
+  const sinceFilter = since ? new Date(since.getTime() - 1000) : null;
 
   const params = new URLSearchParams({
     $top: String(max),
@@ -179,16 +201,21 @@ export async function fetchRecentOutlookMessages(
     params.set('$filter', `receivedDateTime ge ${sinceFilter.toISOString()}`);
   }
 
-  const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/messages?${params}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/messages?${params}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      // Prefer plain text bodies when Graph supports it
+      Prefer: 'outlook.body-content-type="text"',
+    },
+  });
   if (res.status === 401) {
     throw new OAuthTokenError('Outlook', 'expired');
   }
-  if (!res.ok) throw new Error('Failed to list Outlook messages');
+  if (!res.ok) {
+    throw await microsoftApiError(res, 'Failed to list Outlook messages');
+  }
 
-  const data = await res.json() as { value?: GraphMessage[] };
+  const data = (await res.json()) as { value?: GraphMessage[] };
   if (!data.value?.length) return [];
 
   const sinceMs = since ? since.getTime() - 1000 : 0;
@@ -197,7 +224,8 @@ export async function fetchRecentOutlookMessages(
     .map((msg) => {
       const fromName = msg.from?.emailAddress?.name;
       const fromAddr = msg.from?.emailAddress?.address;
-      const from = fromName && fromAddr ? `${fromName} <${fromAddr}>` : fromAddr || fromName || 'Unknown';
+      const from =
+        fromName && fromAddr ? `${fromName} <${fromAddr}>` : fromAddr || fromName || 'Unknown';
       return {
         externalId: msg.id,
         from,
