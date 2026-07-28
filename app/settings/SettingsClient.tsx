@@ -55,8 +55,18 @@ export default function SettingsClient() {
 
   async function reload() {
     const [g, o, t, p] = await Promise.all([getGmailStatus(), getOutlookStatus(), getTwilioStatus(), getAllPlatformStatuses()]);
-    setGmail(g);
-    setOutlook(o);
+    setGmail({
+      configured: g.configured,
+      connected: g.connected,
+      identifier: g.identifier ?? g.email,
+      lastSyncedAt: g.lastSyncedAt,
+    });
+    setOutlook({
+      configured: o.configured,
+      connected: o.connected,
+      identifier: o.identifier ?? o.email,
+      lastSyncedAt: o.lastSyncedAt,
+    });
     setTwilio({ ...t, identifier: t.phoneNumber });
     setSlack(p.slack);
     setDiscord(p.discord);
@@ -91,13 +101,17 @@ export default function SettingsClient() {
     const connected = ['gmail', 'outlook', 'slack', 'discord', 'telegram', 'whatsapp', 'x'];
     for (const key of connected) {
       if (searchParams.get(key) === 'connected') {
-        toast.success(`${key.charAt(0).toUpperCase() + key.slice(1)} connected`);
+        // Gmail may include a more specific imported/error toast below
+        if (!(key === 'gmail' && (searchParams.get('imported') || searchParams.get('error') === 'gmail-sync-failed'))) {
+          toast.success(`${key.charAt(0).toUpperCase() + key.slice(1)} connected`);
+        }
         reload();
       }
     }
     const errors: Record<string, string> = {
       'gmail-not-configured': 'Gmail OAuth not configured',
       'gmail-auth-failed': 'Gmail authorization failed',
+      'gmail-sync-failed': 'Gmail connected, but import failed',
       'outlook-not-configured': 'Outlook OAuth not configured',
       'outlook-auth-failed': 'Outlook authorization failed',
       'slack-not-configured': 'Slack OAuth not configured',
@@ -108,7 +122,14 @@ export default function SettingsClient() {
       'x-auth-failed': 'X authorization failed',
     };
     const err = searchParams.get('error');
-    if (err && errors[err]) toast.error(errors[err]);
+    const detail = searchParams.get('detail');
+    if (err && errors[err]) {
+      toast.error(detail ? `${errors[err]}: ${detail}` : errors[err], { duration: 10000 });
+    }
+    const imported = searchParams.get('imported');
+    if (imported && searchParams.get('gmail') === 'connected') {
+      toast.success(`Gmail connected — imported ${imported} email${imported === '1' ? '' : 's'}`);
+    }
     if (searchParams.get('billing') === 'success') toast.success('Subscription updated');
     if (searchParams.get('billing') === 'cancelled') toast.info('Checkout cancelled');
   }, [searchParams]);
@@ -238,11 +259,13 @@ export default function SettingsClient() {
         <div className="space-y-4">
           <OAuthCard icon={<Mail className="text-blue-500" size={20} />} title="Gmail" hint="GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET"
             callbackPath="/api/auth/gmail/callback" oauthProviderLabel="Google Cloud Console"
+            oauthInfoKey="gmail"
             status={gmail} connectHref="/api/auth/gmail" onSync={() => runSync('gmail', syncGmailAction)}
             syncing={syncing.gmail} onDisconnect={async () => { await disconnectGmailAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<Mail className="text-sky-500" size={20} />} title="Outlook" hint="MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET"
             callbackPath="/api/auth/microsoft/callback" oauthProviderLabel="Azure Portal → App registration → Redirect URIs"
+            oauthInfoKey="outlook"
             status={outlook} connectHref="/api/auth/microsoft" onSync={() => runSync('outlook', syncOutlookAction)}
             syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }}
             extraHelp={
@@ -261,16 +284,19 @@ export default function SettingsClient() {
 
           <OAuthCard icon={<Hash className="text-purple-500" size={20} />} title="Slack" hint="SLACK_CLIENT_ID, SLACK_CLIENT_SECRET"
             callbackPath="/api/auth/slack/callback" oauthProviderLabel="api.slack.com → Your App → OAuth & Permissions"
+            oauthInfoKey="slack"
             status={slack} connectHref="/api/auth/slack" onSync={() => runSync('slack', syncSlackAction)}
             syncing={syncing.slack} onDisconnect={async () => { await disconnectSlackAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<MessageCircle className="text-indigo-500" size={20} />} title="Discord" hint="DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET"
             callbackPath="/api/auth/discord/callback" oauthProviderLabel="Discord Developer Portal → OAuth2 → Redirects"
+            oauthInfoKey="discord"
             status={discord} connectHref="/api/auth/discord" onSync={() => runSync('discord', syncDiscordAction)}
             syncing={syncing.discord} onDisconnect={async () => { await disconnectDiscordAction(); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<AtSign className="text-foreground" size={20} />} title="X / Twitter" hint="X_CLIENT_ID, X_CLIENT_SECRET"
             callbackPath="/api/auth/x/callback" oauthProviderLabel="developer.x.com → User authentication settings"
+            oauthInfoKey="x"
             status={xPlatform} connectHref="/api/auth/x" onSync={() => runSync('x', syncXAction)}
             syncing={syncing.x} onDisconnect={async () => { await disconnectXAction(); await reload(); toast.success('Disconnected'); }} />
 
@@ -407,18 +433,51 @@ export default function SettingsClient() {
   );
 }
 
-function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel, extraHelp }: {
+function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel, oauthInfoKey, extraHelp }: {
   icon: ReactNode; title: string; hint: string; status: Status;
   connectHref: string; onSync: () => void; syncing?: boolean; onDisconnect: () => void;
-  callbackPath?: string; oauthProviderLabel?: string; extraHelp?: ReactNode;
+  callbackPath?: string; oauthProviderLabel?: string; oauthInfoKey?: string; extraHelp?: ReactNode;
 }) {
   const [callbackUrl, setCallbackUrl] = useState('');
+  const [redirectUris, setRedirectUris] = useState<string[]>([]);
+  const [jsOrigins, setJsOrigins] = useState<string[]>([]);
 
   useEffect(() => {
-    if (callbackPath && typeof window !== 'undefined') {
-      setCallbackUrl(`${window.location.origin}${callbackPath}`);
+    let cancelled = false;
+    async function loadCallback() {
+      // Prefer the server OAuth callback (from NEXT_PUBLIC_APP_URL) over window.origin —
+      // they can differ (www vs apex, Codespace URL, etc.) and only the server value is sent to Google.
+      if (oauthInfoKey) {
+        try {
+          const res = await fetch('/api/auth/oauth-info');
+          if (res.ok) {
+            const data = await res.json() as {
+              googleCloudConsole?: { authorizedRedirectUris?: string[]; authorizedJavaScriptOrigins?: string[] };
+              integrations?: Record<string, { callbackUrl?: string }>;
+            };
+            const serverCallback = data.integrations?.[oauthInfoKey]?.callbackUrl;
+            if (!cancelled && serverCallback) {
+              setCallbackUrl(serverCallback);
+              if (oauthInfoKey === 'gmail') {
+                setRedirectUris(data.googleCloudConsole?.authorizedRedirectUris ?? [serverCallback]);
+                setJsOrigins(data.googleCloudConsole?.authorizedJavaScriptOrigins ?? []);
+              }
+              return;
+            }
+          }
+        } catch {
+          /* fall through to window.origin */
+        }
+      }
+      if (!cancelled && callbackPath && typeof window !== 'undefined') {
+        setCallbackUrl(`${window.location.origin}${callbackPath}`);
+      }
     }
-  }, [callbackPath]);
+    loadCallback();
+    return () => { cancelled = true; };
+  }, [callbackPath, oauthInfoKey]);
+
+  const urisToShow = redirectUris.length > 0 ? redirectUris : (callbackUrl ? [callbackUrl] : []);
 
   return (
     <div className="card p-4 sm:p-6 space-y-4">
@@ -427,18 +486,78 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
         <div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">OAuth connect + sync</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
-      {callbackUrl && oauthProviderLabel && (
+      {urisToShow.length > 0 && oauthProviderLabel && (
         <details className="text-xs text-muted-foreground rounded-xl border border-border p-3" open={!status.connected && status.configured && title === 'Gmail'}>
           <summary className="cursor-pointer font-medium text-foreground">
-            {status.configured ? 'Fix redirect_uri_mismatch' : 'Setup: redirect URI'}
+            {status.configured ? 'Fix Error 400 / redirect_uri_mismatch' : 'Setup: redirect URI'}
           </summary>
           <p className="mt-2">
-            OAuth error <strong>400: redirect_uri_mismatch</strong> means this URI is missing.
-            In {oauthProviderLabel}, open your <strong>Web application</strong> client (same as server env) and add exactly:
+            Google <strong>Error 400: redirect_uri_mismatch</strong> means one of these URIs is missing
+            from {oauthProviderLabel}. Open your <strong>Web application</strong> client (same as{' '}
+            <code className="bg-muted px-1 rounded">GOOGLE_CLIENT_ID</code>) and add <strong>every</strong> line exactly:
           </p>
-          <code className="block break-all bg-muted p-2 rounded-lg mt-2 text-[11px] select-all font-mono">{callbackUrl}</code>
-          <p className="mt-2">Also add JavaScript origin: <code className="bg-muted px-1 rounded">{typeof window !== 'undefined' ? window.location.origin : 'https://www.msgnexus.ai'}</code></p>
+          <ul className="mt-2 space-y-1.5">
+            {urisToShow.map((uri) => (
+              <li key={uri}>
+                <code className="block break-all bg-muted p-2 rounded-lg text-[11px] select-all font-mono">{uri}</code>
+              </li>
+            ))}
+          </ul>
+          {jsOrigins.length > 0 && (
+            <p className="mt-2">
+              Authorized JavaScript origins:{' '}
+              {jsOrigins.map((o) => (
+                <code key={o} className="bg-muted px-1 rounded mr-1 break-all">{o}</code>
+              ))}
+            </p>
+          )}
+          {jsOrigins.length === 0 && (
+            <p className="mt-2">
+              Also add JavaScript origin:{' '}
+              <code className="bg-muted px-1 rounded">
+                {typeof window !== 'undefined' ? window.location.origin : 'https://www.msgnexus.ai'}
+              </code>
+            </p>
+          )}
           <p className="mt-1">Click <strong>Save</strong>, wait 1–2 minutes, then try Connect again.</p>
+          {title === 'Gmail' && (
+            <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+              <p className="font-medium text-foreground">Error 403: access_denied</p>
+              <p>
+                The OAuth consent screen is in <strong>Testing</strong> mode. Only listed test users can connect.
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  Open{' '}
+                  <a
+                    className="underline"
+                    href="https://console.cloud.google.com/apis/credentials/consent"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    OAuth consent screen
+                  </a>
+                </li>
+                <li>Under <strong>Test users</strong>, add the exact Google account you sign in with</li>
+                <li>
+                  Enable{' '}
+                  <a
+                    className="underline"
+                    href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Gmail API
+                  </a>{' '}
+                  for this project
+                </li>
+                <li>Save, wait ~1 minute, try Connect again (use an Incognito window if Google cached the error)</li>
+              </ol>
+            </div>
+          )}
+          <p className="mt-1 text-[11px]">
+            Live check: <a className="underline" href="/api/auth/oauth-info" target="_blank" rel="noreferrer">/api/auth/oauth-info</a>
+          </p>
         </details>
       )}
       {extraHelp}

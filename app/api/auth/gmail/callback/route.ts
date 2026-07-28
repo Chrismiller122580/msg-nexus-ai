@@ -27,6 +27,9 @@ export async function GET(request: Request) {
   }
 
   let success = false;
+  let syncError: string | undefined;
+  let imported = 0;
+
   try {
     const tokens = await exchangeGmailCode(code, oauthOrigin);
     const profile = await getGmailProfile(tokens.access_token);
@@ -60,11 +63,27 @@ export async function GET(request: Request) {
     }
 
     await ensureEmailConnectedAccount(user.id, profile.emailAddress);
-    await syncGmailForUser(user.id);
+    const sync = await syncGmailForUser(user.id);
     success = true;
+    imported = sync.imported ?? 0;
+    if (sync.error) {
+      console.error('Gmail initial sync error:', sync.error);
+      syncError = sync.error;
+    }
   } catch (err) {
     console.error('Gmail callback error:', err);
   }
 
-  redirect(success ? '/settings?gmail=connected' : '/settings?error=gmail-auth-failed');
+  if (!success) {
+    redirect('/settings?error=gmail-auth-failed');
+  }
+  if (syncError) {
+    redirect(
+      `/settings?gmail=connected&error=gmail-sync-failed&detail=${encodeURIComponent(syncError.slice(0, 180))}`
+    );
+  }
+  if (imported > 0) {
+    redirect(`/settings?gmail=connected&imported=${imported}`);
+  }
+  redirect('/settings?gmail=connected');
 }

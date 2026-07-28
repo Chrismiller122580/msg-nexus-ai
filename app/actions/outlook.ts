@@ -25,6 +25,7 @@ export async function getOutlookStatus() {
     configured: isMicrosoftConfigured(),
     connected: Boolean(conn),
     email: conn?.email,
+    identifier: conn?.email,
     lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
     connectedAt: conn?.connectedAt?.toISOString(),
   };

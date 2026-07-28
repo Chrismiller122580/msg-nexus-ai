@@ -31,6 +31,25 @@ export function getGmailAuthUrl(state: string, appUrl?: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
+async function gmailApiError(res: Response, fallback: string): Promise<Error> {
+  let detail = '';
+  try {
+    const body = (await res.json()) as {
+      error?: { message?: string; status?: string } | string;
+      error_description?: string;
+    };
+    if (typeof body.error === 'string') {
+      detail = body.error_description || body.error;
+    } else if (body.error?.message) {
+      detail = body.error.message;
+    }
+  } catch {
+    /* ignore parse errors */
+  }
+  const suffix = detail ? `: ${detail}` : ` (HTTP ${res.status})`;
+  return new Error(`${fallback}${suffix}`);
+}
+
 export async function exchangeGmailCode(code: string, appUrl?: string) {
   const redirectUri = getOAuthCallbackUrl('gmail', appUrl);
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -46,7 +65,7 @@ export async function exchangeGmailCode(code: string, appUrl?: string) {
   });
 
   if (!res.ok) {
-    throw new Error('Failed to exchange Gmail authorization code');
+    throw await gmailApiError(res, 'Failed to exchange Gmail authorization code');
   }
 
   return res.json() as Promise<{
@@ -60,7 +79,7 @@ export async function getGmailProfile(accessToken: string) {
   const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/profile', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error('Failed to fetch Gmail profile');
+  if (!res.ok) throw await gmailApiError(res, 'Failed to fetch Gmail profile');
   return res.json() as Promise<{ emailAddress: string }>;
 }
 
@@ -114,14 +133,17 @@ interface GmailMessageList {
   messages?: Array<{ id: string }>;
 }
 
+interface GmailPart {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: GmailPart[];
+  headers?: Array<{ name: string; value: string }>;
+}
+
 interface GmailMessagePayload {
   id: string;
   internalDate?: string;
-  payload?: {
-    headers?: Array<{ name: string; value: string }>;
-    body?: { data?: string };
-    parts?: Array<{ mimeType?: string; body?: { data?: string } }>;
-  };
+  payload?: GmailPart;
 }
 
 function decodeBase64Url(data: string): string {
@@ -129,14 +151,46 @@ function decodeBase64Url(data: string): string {
   return Buffer.from(normalized, 'base64').toString('utf-8');
 }
 
-function extractBody(payload: GmailMessagePayload['payload']): string {
+function extractBody(payload: GmailPart | undefined): string {
   if (!payload) return '';
-  if (payload.body?.data) return decodeBase64Url(payload.body.data);
-  const textPart = payload.parts?.find((p) => p.mimeType === 'text/plain');
+  if (payload.body?.data && (!payload.parts || payload.parts.length === 0)) {
+    const raw = decodeBase64Url(payload.body.data);
+    return payload.mimeType === 'text/html' ? raw.replace(/<[^>]+>/g, ' ') : raw;
+  }
+  const textPart = payload.parts?.find((p) => p.mimeType === 'text/plain' && p.body?.data);
   if (textPart?.body?.data) return decodeBase64Url(textPart.body.data);
-  const htmlPart = payload.parts?.find((p) => p.mimeType === 'text/html');
+  const htmlPart = payload.parts?.find((p) => p.mimeType === 'text/html' && p.body?.data);
   if (htmlPart?.body?.data) return decodeBase64Url(htmlPart.body.data).replace(/<[^>]+>/g, ' ');
+  // Nested multiparts (e.g. multipart/alternative inside multipart/mixed)
+  for (const part of payload.parts || []) {
+    const nested = extractBody(part);
+    if (nested) return nested;
+  }
   return '';
+}
+
+function headerValue(
+  headers: Array<{ name: string; value: string }> | undefined,
+  name: string
+): string | undefined {
+  return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
+}
+
+const FETCH_CONCURRENCY = 8;
+
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  );
+  return results;
 }
 
 export async function fetchRecentGmailMessages(
@@ -145,6 +199,8 @@ export async function fetchRecentGmailMessages(
   since?: Date | null
 ) {
   const params = new URLSearchParams({ maxResults: String(max) });
+  // Prefer inbox mail so connect/sync always has something useful to show
+  params.set('labelIds', 'INBOX');
   if (since) params.set('q', formatGmailAfterQuery(since));
 
   const listRes = await fetch(
@@ -154,39 +210,41 @@ export async function fetchRecentGmailMessages(
   if (listRes.status === 401) {
     throw new OAuthTokenError('Gmail', 'expired');
   }
-  if (!listRes.ok) throw new Error('Failed to list Gmail messages');
+  if (!listRes.ok) {
+    throw await gmailApiError(listRes, 'Failed to list Gmail messages');
+  }
 
   const list = (await listRes.json()) as GmailMessageList;
   if (!list.messages?.length) return [];
 
   const sinceMs = since ? since.getTime() - 1000 : 0;
-  const results = [];
-  for (const item of list.messages) {
+
+  const fetched = await mapPool(list.messages, FETCH_CONCURRENCY, async (item) => {
     const msgRes = await fetch(
       `https://www.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (!msgRes.ok) continue;
+    if (!msgRes.ok) return null;
 
     const msg = (await msgRes.json()) as GmailMessagePayload;
     const headers = msg.payload?.headers || [];
-    const from = headers.find((h) => h.name === 'From')?.value || 'Unknown';
-    const subject = headers.find((h) => h.name === 'Subject')?.value;
+    const from = headerValue(headers, 'From') || 'Unknown';
+    const subject = headerValue(headers, 'Subject');
     const body = extractBody(msg.payload).trim().slice(0, 4000);
     const timestamp = msg.internalDate
       ? new Date(Number(msg.internalDate)).toISOString()
       : new Date().toISOString();
 
-    if (sinceMs && new Date(timestamp).getTime() < sinceMs) continue;
+    if (sinceMs && new Date(timestamp).getTime() < sinceMs) return null;
 
-    results.push({
+    return {
       externalId: msg.id,
       from,
       subject,
       body: body || subject || '(empty message)',
       timestamp,
-    });
-  }
+    };
+  });
 
-  return results;
+  return fetched.filter((m): m is NonNullable<typeof m> => m != null);
 }

@@ -128,13 +128,16 @@ export function syncErrorResult(err: unknown, fallback = 'Sync failed'): SyncRes
 }
 
 /**
- * Gmail `q` after: operator — day precision in API; we also support
- * epoch seconds which Gmail accepts for finer windows.
+ * Gmail search `after:` is day-precision (`yyyy/mm/dd`), not epoch seconds.
+ * Use the UTC calendar day of `since` (minus a tiny buffer so boundary mail
+ * is included). Finer filtering is done client-side; ingest dedupes.
  */
 export function formatGmailAfterQuery(since: Date): string {
-  const sec = Math.floor(since.getTime() / 1000);
-  // Subtract 1s so boundary messages are not dropped; ingest dedupes.
-  return `after:${Math.max(0, sec - 1)}`;
+  const d = new Date(since.getTime() - 1000);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `after:${y}/${m}/${day}`;
 }
 
 /** Slack conversations.history `oldest` is unix seconds as a string. */

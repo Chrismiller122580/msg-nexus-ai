@@ -19,10 +19,12 @@ describe('oauth-token helpers', () => {
     assert.equal(isTokenFresh(new Date(Date.now() - 1000)), false);
   });
 
-  it('formatGmailAfterQuery uses epoch seconds with 1s buffer', () => {
+  it('formatGmailAfterQuery uses yyyy/mm/dd (Gmail day precision)', () => {
     const d = new Date('2024-06-15T12:00:00.000Z');
-    const sec = Math.floor(d.getTime() / 1000) - 1;
-    assert.equal(formatGmailAfterQuery(d), `after:${sec}`);
+    // 1s buffer stays on the same UTC day
+    assert.equal(formatGmailAfterQuery(d), 'after:2024/06/15');
+    // just after midnight UTC still maps to previous day after buffer
+    assert.equal(formatGmailAfterQuery(new Date('2024-06-15T00:00:00.500Z')), 'after:2024/06/14');
   });
 
   it('formatSlackOldest returns unix seconds string', () => {

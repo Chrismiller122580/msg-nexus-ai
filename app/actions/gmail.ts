@@ -25,6 +25,7 @@ export async function getGmailStatus() {
     configured: isGmailConfigured(),
     connected: Boolean(conn),
     email: conn?.email,
+    identifier: conn?.email,
     lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
     connectedAt: conn?.connectedAt?.toISOString(),
   };
@@ -38,7 +39,12 @@ export async function disconnectGmailAction() {
   return { success: true };
 }
 
-export async function syncGmailAction(): Promise<{ success?: boolean; error?: string; imported?: number }> {
+export async function syncGmailAction(): Promise<{
+  success?: boolean;
+  error?: string;
+  info?: string;
+  imported?: number;
+}> {
   try {
     const user = await requireUser();
     const result = await syncGmailForUser(user.id);
@@ -46,7 +52,7 @@ export async function syncGmailAction(): Promise<{ success?: boolean; error?: st
 
     revalidatePath('/inbox');
     revalidatePath('/settings');
-    return { success: true, imported: result.imported };
+    return { success: true, imported: result.imported, info: result.info };
   } catch (err: unknown) {
     console.error('syncGmailAction error:', err);
     return { error: err instanceof Error ? err.message : 'Gmail sync failed' };

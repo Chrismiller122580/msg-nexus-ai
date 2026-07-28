@@ -344,14 +344,22 @@ export default function InboxClient() {
     try {
       const result = await syncGmailAction();
       if (result.error) {
-        toast.error(result.error);
+        toast.error(result.error, { duration: 10000 });
         return;
       }
       const refreshed = await getUserMessages();
       setMessages(refreshed.messages);
       setInsights(refreshed.insights);
       setGmailStatus(await getGmailStatus());
-      toast.success(`Imported ${result.imported ?? 0} new email${result.imported === 1 ? '' : 's'} from Gmail`);
+      if ((result.imported ?? 0) === 0 && result.info) {
+        toast.info(result.info, { duration: 10000 });
+      } else {
+        toast.success(
+          `Imported ${result.imported ?? 0} new email${result.imported === 1 ? '' : 's'} from Gmail${
+            result.info ? ` — ${result.info}` : ''
+          }`
+        );
+      }
     } finally {
       setSyncingGmail(false);
     }
