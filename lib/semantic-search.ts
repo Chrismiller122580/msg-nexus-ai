@@ -161,8 +161,6 @@ export function getTopInsights(messages: Message[], insights: Record<string, Ins
   const bills: InsightItem[] = [];
   const shopping: InsightItem[] = [];
 
-  let monthlyRecurring = 0;
-
   for (const m of messages) {
     const ins = insights[m.id];
     if (!ins || ins.category === 'other') continue;
@@ -174,7 +172,6 @@ export function getTopInsights(messages: Message[], insights: Record<string, Ins
 
     if (ins.category === 'subscription') {
       subs.push(item);
-      if (ins.amount && ins.isRecurring) monthlyRecurring += ins.amount;
     } else if (ins.category === 'bill') {
       bills.push(item);
     } else if (ins.category === 'shopping') {
@@ -182,5 +179,7 @@ export function getTopInsights(messages: Message[], insights: Record<string, Ins
     }
   }
 
-  return { subs, bills, shopping, monthlyRecurring: Math.round(monthlyRecurring * 100) / 100 };
+  // Monthly recurring is computed from the deduped cancel list in the UI so we
+  // don't double-count the same vendor across multiple messages.
+  return { subs, bills, shopping, monthlyRecurring: 0 };
 }

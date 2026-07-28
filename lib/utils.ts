@@ -13,14 +13,14 @@ export function formatRelativeTime(iso: string): string {
   }
 }
 
-export function formatCurrency(amount?: number, currency = 'USD'): string {
-  if (amount == null) return '';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
+export {
+  formatCurrency,
+  normalizeCurrencyCode,
+  detectBillingInterval,
+  toMonthlyAmount,
+  intervalSuffix,
+  formatMoneyTotals,
+} from './money';
 
 export function cn(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');

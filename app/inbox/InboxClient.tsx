@@ -16,7 +16,14 @@ import { getMessageBadge } from '../../lib/message-display';
 import { parseMessage } from '../../lib/ai-parser';
 import { searchMessages, getTopInsights } from '../../lib/semantic-search';
 import { buildSubscriptionCancelList, getCancelGuide } from '../../lib/subscription-cancel';
-import { formatRelativeTime, formatCurrency, cn, downloadJson } from '../../lib/utils';
+import {
+  formatRelativeTime,
+  formatCurrency,
+  formatMoneyTotals,
+  intervalSuffix,
+  cn,
+  downloadJson,
+} from '../../lib/utils';
 import { logoutAction } from '../actions/auth';
 import {
   getUserMessages, saveInsight,
@@ -234,22 +241,35 @@ export default function InboxClient() {
   }, [selectedMessageId]);
 
   const aggregates = useMemo(() => {
-    const { subs, bills, shopping, monthlyRecurring } = getTopInsights(filteredMessages, insights);
+    const { subs, bills, shopping } = getTopInsights(filteredMessages, insights);
     const totalParsed = Object.keys(insights).length;
     const upcomingBills = bills
-      .filter(b => b.insight.amount != null)
+      .filter((b) => b.insight.amount != null)
       .sort((a, b) => (a.insight.amount || 0) - (b.insight.amount || 0));
-    const totalUpcoming = upcomingBills.reduce((sum, b) => sum + (b.insight.amount || 0), 0);
     const cancelList = buildSubscriptionCancelList(subs);
+
+    // Deduped monthly spend (respects currency + annual→monthly conversion)
+    const monthlyRecurringLabel = formatMoneyTotals(
+      cancelList.map((c) => ({
+        monthly: c.monthlyAmount,
+        currency: c.currency,
+      }))
+    );
+    const totalUpcomingLabel = formatMoneyTotals(
+      upcomingBills.map((b) => ({
+        amount: b.insight.amount,
+        currency: b.insight.currency,
+      }))
+    );
 
     return {
       subs,
       cancelList,
       bills: upcomingBills,
       shopping,
-      monthlyRecurring,
+      monthlyRecurringLabel,
       totalParsed,
-      totalUpcoming: Math.round(totalUpcoming * 100) / 100,
+      totalUpcomingLabel,
       totalMessages: filteredMessages.length,
     };
   }, [filteredMessages, insights]);
@@ -520,7 +540,14 @@ export default function InboxClient() {
               <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
                 <span>Category: <span className="text-foreground">{selectedInsight.category}</span></span>
                 {selectedInsight.vendor && <span>Vendor: <span className="text-foreground">{selectedInsight.vendor}</span></span>}
-                {selectedInsight.amount != null && <span>Amount: <span className="text-emerald-500">{formatCurrency(selectedInsight.amount)}</span></span>}
+                {selectedInsight.amount != null && (
+                  <span>
+                    Amount:{' '}
+                    <span className="text-emerald-500">
+                      {formatCurrency(selectedInsight.amount, selectedInsight.currency)}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
             {(selectedInsight.category === 'subscription' || selectedInsight.isRecurring) && (
@@ -925,12 +952,22 @@ export default function InboxClient() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="pulse-card">
                   <div className="flex items-center gap-2 text-emerald-500 text-sm"><DollarSign size={16} /> MONTHLY RECURRING</div>
-                  <div className="text-3xl sm:text-4xl font-semibold tabular-nums tracking-tighter mt-2">{formatCurrency(aggregates.monthlyRecurring)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">from {aggregates.subs.length} active subscriptions</div>
+                  <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
+                    {aggregates.monthlyRecurringLabel}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    from {aggregates.cancelList.length} active subscription
+                    {aggregates.cancelList.length === 1 ? '' : 's'}
+                    {aggregates.cancelList.some((c) => c.billingInterval === 'year')
+                      ? ' · annual plans ÷ 12'
+                      : ''}
+                  </div>
                 </div>
                 <div className="pulse-card">
                   <div className="flex items-center gap-2 text-amber-500 text-sm"><Calendar size={16} /> UPCOMING BILLS</div>
-                  <div className="text-3xl sm:text-4xl font-semibold tabular-nums tracking-tighter mt-2">{formatCurrency(aggregates.totalUpcoming)}</div>
+                  <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
+                    {aggregates.totalUpcomingLabel}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-1">{aggregates.bills.length} bills detected</div>
                 </div>
                 <div className="pulse-card">
@@ -942,7 +979,7 @@ export default function InboxClient() {
               <div className="pulse-card">
                 <div className="font-semibold mb-1">Active Subscriptions</div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Detected from your inbox. Open a guide to cancel or manage each one.
+                  Detected from your inbox (one row per vendor). Amounts show charge currency and period.
                 </p>
                 {aggregates.cancelList.length === 0 && (
                   <div className="text-sm text-muted-foreground">
@@ -950,22 +987,45 @@ export default function InboxClient() {
                   </div>
                 )}
                 <div className="space-y-4">
-                  {aggregates.cancelList.map((item) => (
-                    <div key={`${item.vendor}-${item.messageId}`} className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => { setView('inbox'); selectMessage(item.messageId); }}
-                        className="w-full text-sm p-3 rounded-xl hover:bg-muted cursor-pointer flex justify-between gap-2 min-h-[44px] items-center text-left border border-border/60"
-                      >
-                        <span className="truncate font-medium">{item.vendor}</span>
-                        <span className="text-emerald-500 tabular-nums shrink-0">
-                          {item.amount != null ? formatCurrency(item.amount) : '—'}
-                          {item.amount != null ? <span className="text-muted-foreground font-normal">/mo</span> : null}
-                        </span>
-                      </button>
-                      <SubscriptionCancelHelp guide={item.guide} compact />
-                    </div>
-                  ))}
+                  {aggregates.cancelList.map((item) => {
+                    const period = intervalSuffix(item.billingInterval);
+                    return (
+                      <div key={`${item.vendor}-${item.messageId}`} className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => { setView('inbox'); selectMessage(item.messageId); }}
+                          className="w-full text-sm p-3 rounded-xl hover:bg-muted cursor-pointer flex justify-between gap-2 min-h-[44px] items-center text-left border border-border/60"
+                        >
+                          <span className="truncate font-medium min-w-0">
+                            {item.vendor}
+                            {item.currency && item.currency !== 'USD' ? (
+                              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground uppercase">
+                                {item.currency}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="text-emerald-500 tabular-nums shrink-0 text-right">
+                            {item.amount != null ? (
+                              <>
+                                {formatCurrency(item.amount, item.currency)}
+                                {period ? (
+                                  <span className="text-muted-foreground font-normal">{period}</span>
+                                ) : null}
+                                {item.billingInterval === 'year' && item.monthlyAmount != null ? (
+                                  <span className="block text-[10px] text-muted-foreground font-normal">
+                                    ≈ {formatCurrency(item.monthlyAmount, item.currency)}/mo
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : (
+                              '—'
+                            )}
+                          </span>
+                        </button>
+                        <SubscriptionCancelHelp guide={item.guide} compact />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

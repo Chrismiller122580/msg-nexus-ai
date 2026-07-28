@@ -11,15 +11,24 @@ import { dispatchWebhookEvent } from '@/lib/webhooks';
 type DbInsightRow = typeof insightsTable.$inferSelect;
 
 function mapInsightRow(ins: DbInsightRow): Insight {
+  const amountRaw = ins.amount;
+  const amountNum =
+    amountRaw != null && String(amountRaw).trim() !== ''
+      ? Number(amountRaw)
+      : NaN;
+  const confRaw = ins.confidence;
+  const confNum =
+    confRaw != null && String(confRaw).trim() !== '' ? Number(confRaw) : NaN;
+
   return {
     messageId: ins.messageId,
     category: ins.category as Category,
-    amount: ins.amount ? Number(ins.amount) : undefined,
-    currency: ins.currency || 'USD',
+    amount: Number.isFinite(amountNum) ? amountNum : undefined,
+    currency: ins.currency?.trim() || 'USD',
     vendor: ins.vendor || undefined,
     dueDate: ins.dueDate || undefined,
     isRecurring: ins.isRecurring ?? undefined,
-    confidence: ins.confidence ? Number(ins.confidence) : 0.5,
+    confidence: Number.isFinite(confNum) ? confNum : 0.5,
     summary: ins.summary || '',
     entities: Array.isArray(ins.entities)
       ? (ins.entities as Insight['entities'])

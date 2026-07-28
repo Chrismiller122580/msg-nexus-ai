@@ -1,4 +1,5 @@
 import { Category, Insight } from './types';
+import { extractAmountAndCurrency, formatCurrency as formatMoneyIntl } from './money';
 
 // Simple but effective local "AI" parser for Phase 1.
 // Deterministic, fast, no network. Extensible via dictionaries and rules.
@@ -42,7 +43,6 @@ const SHOPPING_KEYWORDS = [
   'amazon', 'walmart', 'target', 'checkout', 'your order',
 ];
 
-const AMOUNT_REGEX = /(?:USD|usd|\$|€|£)?\s?(\d{1,4}(?:,\d{3})*(?:\.\d{2})?)\b/g;
 const DATE_DUE_REGEX = /(?:due(?:\s+(?:on|by|date))?|pay by|payment due)\s*:?\s*([A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?|\d{1,2}\s+[A-Za-z]{3,9})/i;
 const RECURRING_REGEX = /(every|monthly|yearly|annual|auto.?renew|recurring|billed monthly)/i;
 
@@ -62,17 +62,7 @@ function findVendor(text: string): string | undefined {
 }
 
 function extractAmount(text: string): { amount?: number; currency: string } {
-  const matches = Array.from(text.matchAll(AMOUNT_REGEX));
-  if (!matches.length) return { currency: 'USD' };
-  // Prefer the first plausible non-year amount
-  for (const m of matches) {
-    const raw = m[1].replace(/,/g, '');
-    const val = parseFloat(raw);
-    if (!isNaN(val) && val > 0.5 && val < 10000) {
-      return { amount: Math.round(val * 100) / 100, currency: 'USD' };
-    }
-  }
-  return { currency: 'USD' };
+  return extractAmountAndCurrency(text);
 }
 
 function extractDueDate(text: string): string | undefined {
@@ -125,16 +115,18 @@ export function parseMessage(body: string, from?: string): Insight {
   if (amount != null) entities.push({ type: 'amount', value: `${currency || 'USD'} ${amount}` });
   if (dueDate) entities.push({ type: 'due', value: dueDate });
 
+  const money = amount != null ? formatMoneyIntl(amount, currency) : '';
+
   // Build a human-ish summary
   let summary = '';
   if (category === 'subscription' && vendor && amount != null) {
-    summary = `${vendor} subscription • ${formatMoney(amount)} recurring`;
+    summary = `${vendor} subscription • ${money} recurring`;
   } else if (category === 'bill' && amount != null) {
-    summary = `Bill for ${vendor || 'service'} • ${formatMoney(amount)}${dueDate ? ` due ${dueDate}` : ''}`;
+    summary = `Bill for ${vendor || 'service'} • ${money}${dueDate ? ` due ${dueDate}` : ''}`;
   } else if (category === 'shopping' && amount != null) {
-    summary = `Purchase${vendor ? ` from ${vendor}` : ''} • ${formatMoney(amount)}`;
+    summary = `Purchase${vendor ? ` from ${vendor}` : ''} • ${money}`;
   } else if (amount != null) {
-    summary = `Detected ${formatMoney(amount)}${vendor ? ` at ${vendor}` : ''}`;
+    summary = `Detected ${money}${vendor ? ` at ${vendor}` : ''}`;
   } else {
     summary = 'No clear monetary signal detected.';
   }
@@ -160,10 +152,6 @@ export function parseMessage(body: string, from?: string): Insight {
     summary,
     entities,
   };
-}
-
-function formatMoney(n: number): string {
-  return '$' + n.toFixed(2);
 }
 
 // Convenience for bulk

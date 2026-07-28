@@ -1,4 +1,10 @@
 import type { Insight, Message } from './types';
+import type { BillingInterval } from './money';
+import {
+  detectBillingInterval,
+  normalizeCurrencyCode,
+  toMonthlyAmount,
+} from './money';
 
 /** Vendor-specific cancel guides for subscriptions detected in the inbox. */
 export type CancelGuide = {
@@ -255,7 +261,10 @@ export type SubscriptionCancelItem = {
   messageId: string;
   vendor: string;
   amount?: number;
+  /** Amount normalized to monthly for totals (annual / 12, etc.). */
+  monthlyAmount?: number;
   currency?: string;
+  billingInterval: BillingInterval;
   summary: string;
   guide: CancelGuide;
   from: string;
@@ -274,11 +283,23 @@ export function buildSubscriptionCancelList(
     const vendor = insight.vendor?.trim() || message.from || 'Unknown';
     const key = normalize(vendor);
     const guide = getCancelGuide(insight.vendor, message.body);
+    const textBlob = `${insight.summary || ''} ${message.body || ''} ${message.subject || ''}`;
+    const billingInterval = detectBillingInterval(textBlob);
+    const currency = normalizeCurrencyCode(insight.currency);
+    const amount =
+      insight.amount != null && Number.isFinite(Number(insight.amount))
+        ? Number(insight.amount)
+        : undefined;
+    const monthlyAmount =
+      amount != null ? Math.round(toMonthlyAmount(amount, billingInterval) * 100) / 100 : undefined;
+
     const entry: SubscriptionCancelItem = {
       messageId: message.id,
       vendor,
-      amount: insight.amount,
-      currency: insight.currency,
+      amount,
+      monthlyAmount,
+      currency,
+      billingInterval,
       summary: insight.summary,
       guide,
       from: message.from,
@@ -290,9 +311,9 @@ export function buildSubscriptionCancelList(
       byVendor.set(key, entry);
       continue;
     }
-    // Prefer entry with amount; then newer message
+    // Prefer entry with amount; then higher monthly; then newer message
     const betterAmount =
-      (entry.amount ?? 0) > (existing.amount ?? 0) ||
+      (entry.monthlyAmount ?? entry.amount ?? 0) > (existing.monthlyAmount ?? existing.amount ?? 0) ||
       (entry.amount != null && existing.amount == null);
     const newer = new Date(entry.timestamp).getTime() > new Date(existing.timestamp).getTime();
     if (betterAmount || (entry.amount === existing.amount && newer)) {
@@ -300,5 +321,7 @@ export function buildSubscriptionCancelList(
     }
   }
 
-  return Array.from(byVendor.values()).sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0));
+  return Array.from(byVendor.values()).sort(
+    (a, b) => (b.monthlyAmount ?? b.amount ?? 0) - (a.monthlyAmount ?? a.amount ?? 0)
+  );
 }
