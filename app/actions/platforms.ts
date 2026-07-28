@@ -189,15 +189,31 @@ export async function startTelegramLinkAction(): Promise<{ success?: boolean; er
   }
 }
 
-export async function connectWhatsAppAction(phoneNumber: string): Promise<{ success?: boolean; error?: string }> {
+export async function connectWhatsAppAction(
+  phoneNumber?: string
+): Promise<{ success?: boolean; error?: string; info?: string; displayPhone?: string }> {
   try {
     const user = await requireUser();
     if (!isWhatsAppConfigured()) return { error: 'WhatsApp Business API is not configured.' };
-    const normalized = normalizeWhatsAppPhone(phoneNumber.trim());
-    if (normalized.length < 10) return { error: 'Enter a valid WhatsApp phone number.' };
+
+    const { verifyWhatsAppCredentials } = await import('@/lib/whatsapp');
+    const verified = await verifyWhatsAppCredentials();
+    if (!verified.ok) {
+      return {
+        error: `WhatsApp credentials failed: ${verified.error}. Check WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.`,
+      };
+    }
+
+    const digits = phoneNumber?.trim() ? normalizeWhatsAppPhone(phoneNumber.trim()) : '';
+    // Store a contact key for multi-user matching; single-tenant webhooks always route to this user.
+    const phone =
+      digits.length >= 10
+        ? `+${digits}`
+        : verified.displayPhone
+          ? `+${normalizeWhatsAppPhone(verified.displayPhone)}`
+          : `wa:${process.env.WHATSAPP_PHONE_NUMBER_ID}`;
 
     const db = getDb();
-    const phone = `+${normalized}`;
     const existing = await db.select().from(whatsappConnections).where(eq(whatsappConnections.userId, user.id)).limit(1);
 
     if (existing.length > 0) {
@@ -207,7 +223,11 @@ export async function connectWhatsAppAction(phoneNumber: string): Promise<{ succ
     }
 
     revalidatePath('/settings');
-    return { success: true };
+    return {
+      success: true,
+      displayPhone: verified.displayPhone,
+      info: 'Connected. WhatsApp cannot import history — configure Meta webhook (messages) then text your Business number.',
+    };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : 'Failed to connect WhatsApp' };
   }

@@ -26,7 +26,14 @@ import {
   startTelegramLinkAction, connectWhatsAppAction,
 } from '@/app/actions/platforms';
 
-type Status = { configured: boolean; connected: boolean; identifier?: string; linkCode?: string; lastSyncedAt?: string };
+type Status = {
+  configured: boolean;
+  connected: boolean;
+  identifier?: string;
+  linkCode?: string;
+  lastSyncedAt?: string;
+  serverPhone?: string;
+};
 
 export default function SettingsClient() {
   const router = useRouter();
@@ -67,14 +74,22 @@ export default function SettingsClient() {
       identifier: o.identifier ?? o.email,
       lastSyncedAt: o.lastSyncedAt,
     });
-    setTwilio({ ...t, identifier: t.phoneNumber });
+    setTwilio({
+      configured: t.configured,
+      connected: t.connected,
+      identifier: t.identifier ?? t.phoneNumber,
+      lastSyncedAt: t.lastSyncedAt,
+      serverPhone: t.serverPhone,
+    });
     setSlack(p.slack);
     setDiscord(p.discord);
     setTelegram(p.telegram);
     setWhatsapp(p.whatsapp);
     setXPlatform(p.x);
-    if (t.connected && 'phoneNumber' in t) setSmsPhone((t as { phoneNumber?: string }).phoneNumber || '');
-    if (p.whatsapp.identifier) setWaPhone(p.whatsapp.identifier);
+    // Do not overwrite personal test-SMS destination with the Twilio line
+    if (p.whatsapp.identifier && !p.whatsapp.identifier.startsWith('wa:')) {
+      setWaPhone(p.whatsapp.identifier);
+    }
     if (p.telegram.linkCode) setTelegramCode(p.telegram.linkCode);
   }
 
@@ -307,7 +322,7 @@ export default function SettingsClient() {
               </div>
               <div>
                 <h2 className="font-semibold">SMS (Twilio)</h2>
-                <p className="text-sm text-muted-foreground">Connect your Twilio number for inbound webhooks, sync, and send</p>
+                <p className="text-sm text-muted-foreground">Connect the server Twilio line for history sync, webhooks, and send</p>
               </div>
             </div>
             {!twilio.configured && (
@@ -319,12 +334,21 @@ export default function SettingsClient() {
                   onSync={() => runSync('twilio', syncTwilioAction)} syncing={syncing.twilio}
                   onDisconnect={async () => { await disconnectTwilioAction(); await reload(); toast.success('Disconnected'); }} />
                 <div className="pt-2 border-t border-border space-y-2">
-                  <p className="text-xs text-muted-foreground">Send a test SMS to your connected Twilio number</p>
+                  <p className="text-xs text-muted-foreground">
+                    Send a test SMS <strong>from</strong> your Twilio line <strong>to a personal phone</strong> (not the Twilio number itself), then Sync.
+                  </p>
+                  <input
+                    type="tel"
+                    value={smsPhone}
+                    onChange={(e) => setSmsPhone(e.target.value)}
+                    placeholder="Your mobile e.g. +15551234567"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm"
+                  />
                   <button
-                    disabled={testSmsSending || !twilio.configured}
+                    disabled={testSmsSending || !twilio.configured || !smsPhone.trim()}
                     onClick={async () => {
-                      const to = smsPhone || twilio.identifier;
-                      if (!to) { toast.error('No phone number on file'); return; }
+                      const to = smsPhone.trim();
+                      if (!to) { toast.error('Enter a personal phone to receive the test'); return; }
                       setTestSmsSending(true);
                       try {
                         const res = await fetch('/api/sms/send', {
@@ -338,7 +362,7 @@ export default function SettingsClient() {
                         const text = await res.text();
                         const data = text ? JSON.parse(text) : {};
                         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        toast.success('SMS sent!');
+                        toast.success('SMS sent — syncing…');
                         await runSync('twilio', syncTwilioAction);
                       } catch (e) {
                         toast.error(e instanceof Error ? e.message : 'Send failed');
@@ -354,14 +378,24 @@ export default function SettingsClient() {
               </>
             ) : (
               <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">Enter the same E.164 number as <code>TWILIO_PHONE_NUMBER</code> on the server.</p>
-                <input type="tel" value={smsPhone} onChange={(e) => setSmsPhone(e.target.value)} placeholder="+15551234567"
+                <p className="text-xs text-muted-foreground">
+                  Connects the server line <code className="bg-muted px-1 rounded">TWILIO_PHONE_NUMBER</code>
+                  {twilio.serverPhone ? (
+                    <> (<code className="bg-muted px-1 rounded">{twilio.serverPhone}</code>)</>
+                  ) : null}
+                  . Optional: confirm the same E.164 number below.
+                </p>
+                <input type="tel" value={smsPhone} onChange={(e) => setSmsPhone(e.target.value)} placeholder="+15551234567 (optional if env set)"
                   className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm" disabled={!twilio.configured} />
                 <button
                   onClick={async () => {
-                    const r = await connectTwilioAction(smsPhone);
+                    const r = await connectTwilioAction(smsPhone || undefined);
                     if (r.error) toast.error(r.error);
-                    else { toast.success('SMS connected'); await reload(); await runSync('twilio', syncTwilioAction); }
+                    else {
+                      toast.success(`SMS connected${r.phoneNumber ? ` as ${r.phoneNumber}` : ''}`);
+                      await reload();
+                      await runSync('twilio', syncTwilioAction);
+                    }
                   }}
                   disabled={!twilio.configured}
                   className="btn btn-primary text-sm disabled:opacity-50"
@@ -371,21 +405,28 @@ export default function SettingsClient() {
               </div>
             )}
             {twilio.configured && (
-              <p className="text-xs text-muted-foreground">Webhook: <code className="break-all">{webhookBase}/api/webhooks/twilio</code></p>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Webhook (Twilio Console → Phone Number → A message comes in):</p>
+                <code className="block break-all bg-muted p-2 rounded-lg">{webhookBase}/api/webhooks/twilio</code>
+              </div>
             )}
           </div>
 
           <PhoneCard icon={<Send className="text-green-600" size={20} />} title="WhatsApp" hint="WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID"
             status={whatsapp} phone={waPhone} setPhone={setWaPhone}
             onConnect={async () => {
-              const r = await connectWhatsAppAction(waPhone);
-              if (r.error) toast.error(r.error);
-              else { toast.success('WhatsApp connected'); await reload(); await runSync('whatsapp', syncWhatsAppAction); }
+              const r = await connectWhatsAppAction(waPhone || undefined);
+              if (r.error) toast.error(r.error, { duration: 10000 });
+              else {
+                toast.success(r.info || 'WhatsApp connected', { duration: 10000 });
+                await reload();
+                await runSync('whatsapp', syncWhatsAppAction);
+              }
             }}
             onSync={() => runSync('whatsapp', syncWhatsAppAction)} syncing={syncing.whatsapp}
             onDisconnect={async () => { await disconnectWhatsAppAction(); await reload(); toast.success('Disconnected'); }}
             webhookUrl={`${webhookBase}/api/webhooks/whatsapp`}
-            extraNote="WhatsApp has no history API — Sync will not pull old chats. Configure Meta webhook (messages) with verify token WHATSAPP_VERIFY_TOKEN, then text your Business number."
+            extraNote="WhatsApp has no history API — Sync will not pull old chats. In Meta Developer → WhatsApp → Configuration, set Callback URL to the webhook below, Verify token = WHATSAPP_VERIFY_TOKEN, subscribe to messages, then text your Business number."
           />
 
           <div className="card p-4 sm:p-6 space-y-4">
@@ -591,7 +632,7 @@ function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSy
           onSync={onSync} syncing={syncing} onDisconnect={onDisconnect} />
       ) : (
         <div className="space-y-3">
-          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 123 4567"
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 123 4567 (optional)"
             className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm" disabled={!status.configured} />
           <button onClick={onConnect} disabled={!status.configured} className="btn btn-primary text-sm disabled:opacity-50">Connect {title}</button>
         </div>

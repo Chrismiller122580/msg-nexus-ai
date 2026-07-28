@@ -83,32 +83,70 @@ export type TwilioFetchedMessage = {
   timestamp: string;
 };
 
+/** Server Twilio line from env (E.164), if configured. */
+export function getTwilioEnvPhoneNumber(): string | null {
+  const raw = process.env.TWILIO_PHONE_NUMBER?.trim();
+  if (!raw) return null;
+  const n = normalizePhoneNumber(raw);
+  return n || null;
+}
+
+function toIsoTimestamp(value?: string | null): string {
+  if (!value) return new Date().toISOString();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+/**
+ * Resolve which phone to query on the Twilio Messages API.
+ * Always prefer TWILIO_PHONE_NUMBER — that is the account line that owns SMS history.
+ * User-entered connect phone is only used when env is unset.
+ */
+export function resolveTwilioSyncLine(connectedPhone?: string | null): string | null {
+  const envLine = getTwilioEnvPhoneNumber();
+  if (envLine) return envLine;
+  if (connectedPhone?.trim()) {
+    const n = normalizePhoneNumber(connectedPhone.trim());
+    return n || null;
+  }
+  return null;
+}
+
+function mapTwilioMessages(rows: TwilioMessage[]): TwilioFetchedMessage[] {
+  const seen = new Set<string>();
+  const messages: TwilioFetchedMessage[] = [];
+  for (const m of rows) {
+    if (!m.sid || seen.has(m.sid)) continue;
+    seen.add(m.sid);
+    messages.push({
+      externalId: m.sid,
+      from: m.from,
+      body: m.body || '(empty SMS)',
+      timestamp: toIsoTimestamp(m.date_sent || m.date_created),
+    });
+  }
+  return messages;
+}
+
 export async function fetchTwilioMessagesForPhone(
   phoneNumber: string,
-  max = 25
-): Promise<{ messages: TwilioFetchedMessage[]; error?: string }> {
+  max = 50
+): Promise<{ messages: TwilioFetchedMessage[]; error?: string; line?: string }> {
   if (!isTwilioConfigured()) {
     return { messages: [], error: 'Twilio is not configured on the server.' };
   }
 
-  // Prefer the server Twilio number (matches Twilio Console) when the user
-  // connected the same line under a slightly different format.
-  const envPhone = process.env.TWILIO_PHONE_NUMBER?.trim();
-  const normalizedUser = normalizePhoneNumber(phoneNumber);
-  const line =
-    envPhone && phonesMatch(envPhone, normalizedUser)
-      ? normalizePhoneNumber(envPhone)
-      : normalizedUser || (envPhone ? normalizePhoneNumber(envPhone) : '');
-
+  const line = resolveTwilioSyncLine(phoneNumber);
   if (!line) {
-    return { messages: [], error: 'No valid Twilio phone number to sync.' };
+    return { messages: [], error: 'No valid Twilio phone number to sync. Set TWILIO_PHONE_NUMBER.' };
   }
 
   const sid = process.env.TWILIO_ACCOUNT_SID!;
   const encoded = encodeURIComponent(line);
 
-  async function list(query: string): Promise<{ messages: TwilioMessage[]; error?: string }> {
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?PageSize=${max}&${query}=${encoded}`;
+  async function list(query?: string): Promise<{ messages: TwilioMessage[]; error?: string }> {
+    const filter = query ? `&${query}=${encoded}` : '';
+    const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json?PageSize=${max}${filter}`;
     const res = await fetch(url, { headers: { Authorization: getTwilioAuthHeader() } });
     const data = (await res.json().catch(() => ({}))) as {
       messages?: TwilioMessage[];
@@ -124,28 +162,22 @@ export async function fetchTwilioMessagesForPhone(
     return { messages: data.messages || [] };
   }
 
+  // Prefer messages involving the Twilio line (inbound To=line + outbound From=line)
   const to = await list('To');
-  if (to.error) return { messages: [], error: to.error };
+  if (to.error) return { messages: [], error: to.error, line };
   const from = await list('From');
-  if (from.error) return { messages: [], error: from.error };
+  if (from.error) return { messages: [], error: from.error, line };
 
-  const combined = [...to.messages, ...from.messages];
-  const seen = new Set<string>();
+  let combined = [...to.messages, ...from.messages];
 
-  const messages = combined
-    .filter((m) => {
-      if (seen.has(m.sid)) return false;
-      seen.add(m.sid);
-      return true;
-    })
-    .map((m) => ({
-      externalId: m.sid,
-      from: m.from,
-      body: m.body || '(empty SMS)',
-      timestamp: m.date_sent || m.date_created || new Date().toISOString(),
-    }));
+  // Fallback: unfiltered recent account messages (helps if number formatting diverges)
+  if (combined.length === 0) {
+    const all = await list();
+    if (all.error) return { messages: [], error: all.error, line };
+    combined = all.messages;
+  }
 
-  return { messages };
+  return { messages: mapTwilioMessages(combined), line };
 }
 
 export async function sendTwilioSms(

@@ -19,11 +19,12 @@ export async function syncWhatsAppForUser(
     .from(whatsappConnections)
     .where(eq(whatsappConnections.userId, userId))
     .limit(1);
-  if (!conn) return { imported: 0, error: 'WhatsApp is not connected.' };
+  if (!conn) return { imported: 0, error: 'WhatsApp is not connected. Connect it in Settings first.' };
 
   await ensureConnectedAccount(userId, 'whatsapp', conn.phoneNumber, 'WhatsApp');
 
   // Cloud API has no history list — inbound only via Meta webhooks.
+  // Still call the stub so the path stays consistent for future adapters.
   const messages = await fetchRecentWhatsAppMessages(conn.phoneNumber, limit);
   const imported = messages.length
     ? await ingestMessages(
@@ -38,11 +39,12 @@ export async function syncWhatsAppForUser(
     .set({ lastSyncedAt: new Date() })
     .where(eq(whatsappConnections.userId, userId));
 
+  // Soft “success” with guidance — Sync is not a history pull for WhatsApp.
   return {
     imported,
     info:
       imported === 0
-        ? 'WhatsApp cannot pull history. New texts appear only via Meta webhook → /api/webhooks/whatsapp (verify token + subscribe to messages). Send a test message to your Business number.'
+        ? 'WhatsApp has no history API. Sync only confirms the connection. New chats arrive via Meta webhook → https://www.msgnexus.ai/api/webhooks/whatsapp (callback URL + WHATSAPP_VERIFY_TOKEN, subscribe to “messages”). Then text your Business number.'
         : undefined,
   };
 }

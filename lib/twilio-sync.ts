@@ -22,25 +22,36 @@ export async function syncTwilioForUser(
     .limit(1);
 
   if (!conn) {
-    return { imported: 0, error: 'SMS is not connected.' };
+    return { imported: 0, error: 'SMS is not connected. Connect SMS in Settings first.' };
   }
 
-  const { messages: fetched, error: fetchError } = await fetchTwilioMessagesForPhone(
-    conn.phoneNumber,
-    limit
-  );
+  const {
+    messages: fetched,
+    error: fetchError,
+    line,
+  } = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
   if (fetchError) {
     return { imported: 0, error: fetchError };
   }
 
-  await ensureConnectedAccount(userId, 'sms', conn.phoneNumber, 'Twilio SMS');
+  // Keep the stored connection on the real Twilio line used for history/webhooks
+  const syncLine = line || conn.phoneNumber;
+  if (line && line !== conn.phoneNumber) {
+    await db
+      .update(twilioConnections)
+      .set({ phoneNumber: line })
+      .where(eq(twilioConnections.userId, userId));
+  }
+
+  await ensureConnectedAccount(userId, 'sms', syncLine, 'Twilio SMS');
 
   for (const m of fetched) {
-    const isOutbound = m.from === conn.phoneNumber || m.from.replace(/\D/g, '') === conn.phoneNumber.replace(/\D/g, '');
+    const isOutbound =
+      m.from === syncLine || m.from.replace(/\D/g, '') === syncLine.replace(/\D/g, '');
     await saveSmsMessage({
       userId,
       from: m.from,
-      to: isOutbound ? undefined : conn.phoneNumber,
+      to: isOutbound ? undefined : syncLine,
       body: m.body,
       direction: isOutbound ? 'out' : 'in',
       status: isOutbound ? 'sent' : 'received',
@@ -69,9 +80,12 @@ export async function syncTwilioForUser(
   if (imported === 0 && fetched.length === 0) {
     return {
       imported: 0,
-      error:
-        'No SMS found for this number. Confirm TWILIO_PHONE_NUMBER matches your Twilio number, the webhook is set to /api/webhooks/twilio, and try sending a test SMS.',
+      info: `No SMS in Twilio for ${syncLine}. Send a text TO this number (webhook: /api/webhooks/twilio), or use “Send test SMS” to a personal phone, then Sync again.`,
     };
+  }
+
+  if (imported === 0 && fetched.length > 0) {
+    return { imported: 0, info: 'SMS already imported (no new messages).' };
   }
 
   return { imported };
