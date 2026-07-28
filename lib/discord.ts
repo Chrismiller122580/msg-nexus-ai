@@ -1,5 +1,5 @@
 import { getDb, discordConnections } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import {
   discordSnowflakeAfter,
@@ -66,10 +66,19 @@ async function refreshDiscordToken(refreshToken: string) {
 
 export async function getValidDiscordToken(
   userId: number,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; connectionId?: number }
 ): Promise<string | null> {
   const db = getDb();
-  const [conn] = await db.select().from(discordConnections).where(eq(discordConnections.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(discordConnections)
+    .where(
+      opts?.connectionId
+        ? and(eq(discordConnections.userId, userId), eq(discordConnections.id, opts.connectionId))
+        : eq(discordConnections.userId, userId)
+    )
+    .limit(1);
+  const conn = rows[0];
   if (!conn) return null;
 
   return resolveAccessToken({
@@ -84,7 +93,7 @@ export async function getValidDiscordToken(
         accessToken,
         refreshToken: refreshToken ?? conn.refreshToken,
         expiresAt,
-      }).where(eq(discordConnections.userId, userId));
+      }).where(eq(discordConnections.id, conn.id));
     },
   });
 }

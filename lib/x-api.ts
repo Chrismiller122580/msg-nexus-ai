@@ -1,5 +1,5 @@
 import { getDb, xConnections } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import crypto from 'crypto';
 import { OAuthTokenError, resolveAccessToken } from '@/lib/oauth-token';
@@ -76,10 +76,19 @@ async function refreshXToken(refreshToken: string) {
 
 export async function getValidXToken(
   userId: number,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; connectionId?: number }
 ): Promise<string | null> {
   const db = getDb();
-  const [conn] = await db.select().from(xConnections).where(eq(xConnections.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(xConnections)
+    .where(
+      opts?.connectionId
+        ? and(eq(xConnections.userId, userId), eq(xConnections.id, opts.connectionId))
+        : eq(xConnections.userId, userId)
+    )
+    .limit(1);
+  const conn = rows[0];
   if (!conn) return null;
 
   return resolveAccessToken({
@@ -94,7 +103,7 @@ export async function getValidXToken(
         accessToken,
         refreshToken: refreshToken ?? conn.refreshToken,
         expiresAt,
-      }).where(eq(xConnections.userId, userId));
+      }).where(eq(xConnections.id, conn.id));
     },
   });
 }

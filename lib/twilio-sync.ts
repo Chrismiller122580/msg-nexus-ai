@@ -15,80 +15,82 @@ export async function syncTwilioForUser(
   }
 
   const db = getDb();
-  const [conn] = await db
+  const conns = await db
     .select()
     .from(twilioConnections)
-    .where(eq(twilioConnections.userId, userId))
-    .limit(1);
+    .where(eq(twilioConnections.userId, userId));
 
-  if (!conn) {
+  if (conns.length === 0) {
     return { imported: 0, error: 'SMS is not connected. Connect SMS in Settings first.' };
   }
 
-  const {
-    messages: fetched,
-    error: fetchError,
-    line,
-  } = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
-  if (fetchError) {
-    return { imported: 0, error: fetchError };
-  }
+  let imported = 0;
+  const infos: string[] = [];
 
-  // Keep the stored connection on the real Twilio line used for history/webhooks
-  const syncLine = line || conn.phoneNumber;
-  if (line && line !== conn.phoneNumber) {
+  for (const conn of conns) {
+    const {
+      messages: fetched,
+      error: fetchError,
+      line,
+    } = await fetchTwilioMessagesForPhone(conn.phoneNumber, limit);
+    if (fetchError) {
+      infos.push(fetchError);
+      continue;
+    }
+
+    const syncLine = line || conn.phoneNumber;
+    if (line && line !== conn.phoneNumber) {
+      await db
+        .update(twilioConnections)
+        .set({ phoneNumber: line })
+        .where(eq(twilioConnections.id, conn.id));
+    }
+
+    await ensureConnectedAccount(userId, 'sms', syncLine, 'Twilio SMS');
+
+    for (const m of fetched) {
+      const isOutbound =
+        m.from === syncLine || m.from.replace(/\D/g, '') === syncLine.replace(/\D/g, '');
+      await saveSmsMessage({
+        userId,
+        from: m.from,
+        to: isOutbound ? undefined : syncLine,
+        body: m.body,
+        direction: isOutbound ? 'out' : 'in',
+        status: isOutbound ? 'sent' : 'received',
+        messageSid: m.externalId,
+        timestamp: new Date(m.timestamp),
+      });
+    }
+
+    imported += await ingestMessages(
+      userId,
+      fetched.map((m) => ({
+        externalId: m.externalId,
+        platformId: 'sms' as const,
+        from: m.from,
+        body: m.body,
+        timestamp: m.timestamp,
+      })),
+      `twilio-${conn.id}`
+    );
+
     await db
       .update(twilioConnections)
-      .set({ phoneNumber: line })
-      .where(eq(twilioConnections.userId, userId));
+      .set({ lastSyncedAt: new Date() })
+      .where(eq(twilioConnections.id, conn.id));
   }
 
-  await ensureConnectedAccount(userId, 'sms', syncLine, 'Twilio SMS');
-
-  for (const m of fetched) {
-    const isOutbound =
-      m.from === syncLine || m.from.replace(/\D/g, '') === syncLine.replace(/\D/g, '');
-    await saveSmsMessage({
-      userId,
-      from: m.from,
-      to: isOutbound ? undefined : syncLine,
-      body: m.body,
-      direction: isOutbound ? 'out' : 'in',
-      status: isOutbound ? 'sent' : 'received',
-      messageSid: m.externalId,
-      timestamp: new Date(m.timestamp),
-    });
-  }
-
-  const imported = await ingestMessages(
-    userId,
-    fetched.map((m) => ({
-      externalId: m.externalId,
-      platformId: 'sms' as const,
-      from: m.from,
-      body: m.body,
-      timestamp: m.timestamp,
-    })),
-    'twilio'
-  );
-
-  await db
-    .update(twilioConnections)
-    .set({ lastSyncedAt: new Date() })
-    .where(eq(twilioConnections.userId, userId));
-
-  if (imported === 0 && fetched.length === 0) {
+  if (imported === 0) {
     return {
       imported: 0,
-      info: `No SMS in Twilio for ${syncLine}. Send a text TO this number (webhook: /api/webhooks/twilio), or use “Send test SMS” to a personal phone, then Sync again.`,
+      info:
+        infos.join(' · ') ||
+        'No SMS found. Send a text to your Twilio number or use Send test SMS, then Sync again.',
     };
   }
 
-  if (imported === 0 && fetched.length > 0) {
-    return { imported: 0, info: 'SMS already imported (no new messages).' };
-  }
-
-  return { imported };
+  return { imported, info: infos.join(' · ') || undefined };
 }
 
 export async function ingestTwilioWebhookMessage(
@@ -104,14 +106,14 @@ export async function ingestTwilioWebhookMessage(
   }
 ): Promise<number> {
   const db = getDb();
-  const [conn] = await db
+  const conns = await db
     .select()
     .from(twilioConnections)
-    .where(eq(twilioConnections.userId, userId))
-    .limit(1);
+    .where(eq(twilioConnections.userId, userId));
 
-  if (!conn) return 0;
+  if (conns.length === 0) return 0;
 
+  const conn = conns[0];
   await ensureConnectedAccount(userId, 'sms', conn.phoneNumber, 'Twilio SMS');
 
   const direction = payload.direction ?? 'in';
@@ -130,13 +132,15 @@ export async function ingestTwilioWebhookMessage(
 
   return ingestMessages(
     userId,
-    [{
-      externalId: payload.MessageSid,
-      platformId: 'sms',
-      from: payload.From,
-      body: payload.Body || '(empty SMS)',
-      timestamp: payload.DateCreated || ts.toISOString(),
-    }],
-    'twilio'
+    [
+      {
+        externalId: payload.MessageSid,
+        platformId: 'sms',
+        from: payload.From,
+        body: payload.Body || '(empty SMS)',
+        timestamp: payload.DateCreated || ts.toISOString(),
+      },
+    ],
+    `twilio-${conn.id}`
   );
 }

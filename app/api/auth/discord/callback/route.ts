@@ -4,7 +4,7 @@ import { getDb, discordConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
 import { exchangeDiscordCode, getDiscordProfile } from '@/lib/discord';
 import { syncDiscordForUser } from '@/lib/discord-sync';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -30,7 +30,14 @@ export async function GET(request: Request) {
     const db = getDb();
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
-    const existing = await db.select().from(discordConnections).where(eq(discordConnections.userId, user.id)).limit(1);
+    const existing = await db
+      .select()
+      .from(discordConnections)
+      .where(
+        and(eq(discordConnections.userId, user.id), eq(discordConnections.discordUserId, profile.id))
+      )
+      .limit(1);
+
     const values = {
       discordUserId: profile.id,
       userName: profile.name,
@@ -40,7 +47,7 @@ export async function GET(request: Request) {
     };
 
     if (existing.length > 0) {
-      await db.update(discordConnections).set(values).where(eq(discordConnections.userId, user.id));
+      await db.update(discordConnections).set(values).where(eq(discordConnections.id, existing[0].id));
     } else {
       await db.insert(discordConnections).values({ userId: user.id, ...values });
     }

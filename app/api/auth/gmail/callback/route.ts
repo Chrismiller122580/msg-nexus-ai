@@ -4,7 +4,7 @@ import { getDb, gmailConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
 import { exchangeGmailCode, getGmailProfile } from '@/lib/gmail';
 import { ensureEmailConnectedAccount, syncGmailForUser } from '@/lib/gmail-sync';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -35,34 +35,35 @@ export async function GET(request: Request) {
     const profile = await getGmailProfile(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();
+    const email = profile.emailAddress;
 
+    // Upsert by (userId, email) so users can connect multiple Gmail accounts
     const existing = await db
       .select()
       .from(gmailConnections)
-      .where(eq(gmailConnections.userId, user.id))
+      .where(and(eq(gmailConnections.userId, user.id), eq(gmailConnections.email, email)))
       .limit(1);
 
     if (existing.length > 0) {
       await db
         .update(gmailConnections)
         .set({
-          email: profile.emailAddress,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? existing[0].refreshToken,
           expiresAt,
         })
-        .where(eq(gmailConnections.userId, user.id));
+        .where(eq(gmailConnections.id, existing[0].id));
     } else {
       await db.insert(gmailConnections).values({
         userId: user.id,
-        email: profile.emailAddress,
+        email,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt,
       });
     }
 
-    await ensureEmailConnectedAccount(user.id, profile.emailAddress);
+    await ensureEmailConnectedAccount(user.id, email);
     const sync = await syncGmailForUser(user.id);
     success = true;
     imported = sync.imported ?? 0;

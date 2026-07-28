@@ -14,37 +14,36 @@ export async function syncWhatsAppForUser(
   }
 
   const db = getDb();
-  const [conn] = await db
+  const conns = await db
     .select()
     .from(whatsappConnections)
-    .where(eq(whatsappConnections.userId, userId))
-    .limit(1);
-  if (!conn) return { imported: 0, error: 'WhatsApp is not connected. Connect it in Settings first.' };
+    .where(eq(whatsappConnections.userId, userId));
+  if (conns.length === 0) {
+    return { imported: 0, error: 'WhatsApp is not connected. Connect it in Settings first.' };
+  }
 
-  await ensureConnectedAccount(userId, 'whatsapp', conn.phoneNumber, 'WhatsApp');
-
-  // Cloud API has no history list — inbound only via Meta webhooks.
-  // Still call the stub so the path stays consistent for future adapters.
-  const messages = await fetchRecentWhatsAppMessages(conn.phoneNumber, limit);
-  const imported = messages.length
-    ? await ingestMessages(
+  let imported = 0;
+  for (const conn of conns) {
+    await ensureConnectedAccount(userId, 'whatsapp', conn.phoneNumber, 'WhatsApp');
+    const messages = await fetchRecentWhatsAppMessages(conn.phoneNumber, limit);
+    if (messages.length) {
+      imported += await ingestMessages(
         userId,
         messages.map((m) => ({ ...m, platformId: 'whatsapp' as const })),
-        'whatsapp'
-      )
-    : 0;
+        `whatsapp-${conn.id}`
+      );
+    }
+    await db
+      .update(whatsappConnections)
+      .set({ lastSyncedAt: new Date() })
+      .where(eq(whatsappConnections.id, conn.id));
+  }
 
-  await db
-    .update(whatsappConnections)
-    .set({ lastSyncedAt: new Date() })
-    .where(eq(whatsappConnections.userId, userId));
-
-  // Soft “success” with guidance — Sync is not a history pull for WhatsApp.
   return {
     imported,
     info:
       imported === 0
-        ? 'WhatsApp has no history API. Sync only confirms the connection. New chats arrive via Meta webhook → https://www.msgnexus.ai/api/webhooks/whatsapp (callback URL + WHATSAPP_VERIFY_TOKEN, subscribe to “messages”). Then text your Business number.'
+        ? `WhatsApp has no history API (${conns.length} number${conns.length === 1 ? '' : 's'} linked). New chats arrive via Meta webhook. Text your Business number.`
         : undefined,
   };
 }
@@ -54,12 +53,16 @@ export async function ingestWhatsAppWebhookMessage(
   payload: { id: string; from: string; body: string; timestamp: string }
 ) {
   const db = getDb();
-  const [conn] = await db
+  const conns = await db
     .select()
     .from(whatsappConnections)
-    .where(eq(whatsappConnections.userId, userId))
-    .limit(1);
-  if (!conn) return 0;
+    .where(eq(whatsappConnections.userId, userId));
+  if (conns.length === 0) return 0;
+
+  // Prefer matching the customer phone to a stored number; else first connection
+  const conn =
+    conns.find((c: (typeof conns)[number]) => phonesMatch(payload.from, c.phoneNumber)) ||
+    conns[0];
 
   await ensureConnectedAccount(userId, 'whatsapp', conn.phoneNumber, 'WhatsApp');
 
@@ -74,14 +77,13 @@ export async function ingestWhatsAppWebhookMessage(
         timestamp: payload.timestamp,
       },
     ],
-    'whatsapp'
+    `whatsapp-${conn.id}`
   );
 }
 
 /**
  * Resolve user for inbound WhatsApp.
- * Meta sends the *customer* phone as `from`; business line is env PHONE_NUMBER_ID.
- * Route to the single connected user, or match by stored phone if multi-user.
+ * Meta sends the *customer* phone as `from`; match stored phones, else first connection.
  */
 export async function findWhatsAppUserByPhone(from: string): Promise<number | null> {
   const db = getDb();
@@ -93,6 +95,5 @@ export async function findWhatsAppUserByPhone(from: string): Promise<number | nu
     if (phonesMatch(from, c.phoneNumber)) return c.userId;
   }
 
-  // Multi-user, no phone match: deliver to first connected user (single business number)
   return connections[0].userId;
 }

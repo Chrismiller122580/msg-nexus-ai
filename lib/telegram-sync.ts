@@ -10,27 +10,50 @@ export async function syncTelegramForUser(
   limit = SYNC_BATCH_SIZE
 ): Promise<SyncResult> {
   const db = getDb();
-  const [conn] = await db.select().from(telegramConnections).where(eq(telegramConnections.userId, userId)).limit(1);
+  const conns = await db
+    .select()
+    .from(telegramConnections)
+    .where(eq(telegramConnections.userId, userId));
 
-  if (!conn?.chatId) {
-    return { imported: 0, error: conn?.linkCode ? 'Send the link code to the Telegram bot first.' : 'Telegram is not connected.' };
+  const linked = conns.filter((c: (typeof conns)[number]) => c.chatId);
+  if (linked.length === 0) {
+    const pending = conns.find((c: (typeof conns)[number]) => c.linkCode);
+    return {
+      imported: 0,
+      error: pending?.linkCode
+        ? 'Send the link code to the Telegram bot first.'
+        : 'Telegram is not connected.',
+    };
   }
 
-  await ensureConnectedAccount(userId, 'telegram', conn.userName || conn.chatId, 'Telegram');
+  let imported = 0;
+  for (const conn of linked) {
+    await ensureConnectedAccount(
+      userId,
+      'telegram',
+      conn.userName || conn.chatId!,
+      'Telegram'
+    );
 
-  const messages = await fetchTelegramUpdatesForChat(conn.chatId, limit);
-  const imported = await ingestMessages(
-    userId,
-    messages.map((m) => ({ ...m, platformId: 'telegram' as const })),
-    'telegram'
-  );
+    const messages = await fetchTelegramUpdatesForChat(conn.chatId!, limit);
+    imported += await ingestMessages(
+      userId,
+      messages.map((m) => ({ ...m, platformId: 'telegram' as const })),
+      `telegram-${conn.id}`
+    );
 
-  await db.update(telegramConnections).set({ lastSyncedAt: new Date() }).where(eq(telegramConnections.userId, userId));
+    await db
+      .update(telegramConnections)
+      .set({ lastSyncedAt: new Date() })
+      .where(eq(telegramConnections.id, conn.id));
+  }
+
   return {
     imported,
-    info: imported === 0
-      ? 'Telegram uses webhooks — new messages arrive at /api/webhooks/telegram after linking.'
-      : undefined,
+    info:
+      imported === 0
+        ? 'Telegram uses webhooks — new messages arrive at /api/webhooks/telegram after linking.'
+        : undefined,
   };
 }
 
@@ -39,16 +62,26 @@ export async function ingestTelegramWebhookMessage(
   payload: { messageId: number; from: string; body: string; timestamp: string }
 ) {
   const db = getDb();
-  const [conn] = await db.select().from(telegramConnections).where(eq(telegramConnections.chatId, chatId)).limit(1);
+  const [conn] = await db
+    .select()
+    .from(telegramConnections)
+    .where(eq(telegramConnections.chatId, chatId))
+    .limit(1);
   if (!conn) return 0;
 
   await ensureConnectedAccount(conn.userId, 'telegram', conn.userName || chatId, 'Telegram');
 
-  return ingestMessages(conn.userId, [{
-    externalId: String(payload.messageId),
-    platformId: 'telegram',
-    from: payload.from,
-    body: payload.body,
-    timestamp: payload.timestamp,
-  }], 'telegram');
+  return ingestMessages(
+    conn.userId,
+    [
+      {
+        externalId: String(payload.messageId),
+        platformId: 'telegram',
+        from: payload.from,
+        body: payload.body,
+        timestamp: payload.timestamp,
+      },
+    ],
+    `telegram-${conn.id}`
+  );
 }

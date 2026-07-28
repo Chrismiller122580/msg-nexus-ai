@@ -1,5 +1,5 @@
 import { getDb, outlookConnections } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import { OAuthTokenError, resolveAccessToken } from '@/lib/oauth-token';
 
@@ -126,15 +126,20 @@ async function refreshMicrosoftToken(refreshToken: string) {
 
 export async function getValidMicrosoftToken(
   userId: number,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; connectionId?: number }
 ): Promise<string | null> {
   const db = getDb();
-  const [conn] = await db
+  const rows = await db
     .select()
     .from(outlookConnections)
-    .where(eq(outlookConnections.userId, userId))
+    .where(
+      opts?.connectionId
+        ? and(eq(outlookConnections.userId, userId), eq(outlookConnections.id, opts.connectionId))
+        : eq(outlookConnections.userId, userId)
+    )
     .limit(1);
 
+  const conn = rows[0];
   if (!conn) return null;
 
   return resolveAccessToken({
@@ -152,7 +157,7 @@ export async function getValidMicrosoftToken(
           expiresAt,
           refreshToken: refreshToken ?? conn.refreshToken,
         })
-        .where(eq(outlookConnections.userId, userId));
+        .where(eq(outlookConnections.id, conn.id));
     },
   });
 }

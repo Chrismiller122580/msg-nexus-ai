@@ -9,89 +9,113 @@ export async function ensureEmailConnectedAccount(userId: number, email: string)
   await ensureConnectedAccount(userId, 'email', email, 'Gmail');
 }
 
+async function syncOneGmailConnection(
+  userId: number,
+  conn: typeof gmailConnections.$inferSelect,
+  limit: number
+): Promise<SyncResult> {
+  let accessToken = await getValidAccessToken(userId, { connectionId: conn.id });
+  if (!accessToken) {
+    return { imported: 0, error: `Gmail ${conn.email} is not connected.` };
+  }
+
+  async function load(since: Date | null) {
+    try {
+      return await fetchRecentGmailMessages(accessToken!, limit, since);
+    } catch (err) {
+      if (err instanceof Error && /session expired|401|expired/i.test(err.message)) {
+        const retried = await getValidAccessToken(userId, {
+          forceRefresh: true,
+          connectionId: conn.id,
+        });
+        if (!retried) throw err;
+        accessToken = retried;
+        return await fetchRecentGmailMessages(retried, limit, since);
+      }
+      throw err;
+    }
+  }
+
+  let gmailMessages = await load(conn.lastSyncedAt ?? null);
+  let usedFullResync = false;
+  if (gmailMessages.length === 0 && conn.lastSyncedAt) {
+    gmailMessages = await load(null);
+    usedFullResync = true;
+  }
+
+  await ensureEmailConnectedAccount(userId, conn.email);
+
+  const imported = await ingestMessages(
+    userId,
+    gmailMessages.map((m) => ({
+      externalId: m.externalId,
+      platformId: 'email' as const,
+      from: m.from,
+      body: m.body,
+      subject: m.subject,
+      timestamp: m.timestamp,
+    })),
+    `gmail-${conn.id}`
+  );
+
+  const db = getDb();
+  await db
+    .update(gmailConnections)
+    .set({ lastSyncedAt: new Date() })
+    .where(eq(gmailConnections.id, conn.id));
+
+  if (imported === 0 && gmailMessages.length === 0) {
+    return {
+      imported: 0,
+      info: `No inbox messages for ${conn.email}.`,
+    };
+  }
+
+  return {
+    imported,
+    info: usedFullResync ? `Full resync for ${conn.email}.` : undefined,
+  };
+}
+
 export async function syncGmailForUser(
   userId: number,
   limit = SYNC_BATCH_SIZE
 ): Promise<SyncResult> {
   try {
-    let accessToken = await getValidAccessToken(userId);
-    if (!accessToken) {
+    const db = getDb();
+    const conns = await db
+      .select()
+      .from(gmailConnections)
+      .where(eq(gmailConnections.userId, userId));
+
+    if (conns.length === 0) {
       return { imported: 0, error: 'Gmail is not connected.' };
     }
 
-    const db = getDb();
+    let imported = 0;
+    const infos: string[] = [];
+    const errors: string[] = [];
 
-    const [conn] = await db
-      .select({ email: gmailConnections.email, lastSyncedAt: gmailConnections.lastSyncedAt })
-      .from(gmailConnections)
-      .where(eq(gmailConnections.userId, userId))
-      .limit(1);
-
-    async function load(since: Date | null) {
+    for (const conn of conns) {
       try {
-        return await fetchRecentGmailMessages(accessToken!, limit, since);
+        const r = await syncOneGmailConnection(userId, conn, limit);
+        imported += r.imported;
+        if (r.error) errors.push(r.error);
+        if (r.info) infos.push(r.info);
       } catch (err) {
-        // One force-refresh retry on expired access token
-        if (err instanceof Error && /session expired|401|expired/i.test(err.message)) {
-          const retried = await getValidAccessToken(userId, { forceRefresh: true });
-          if (!retried) throw err;
-          accessToken = retried;
-          return await fetchRecentGmailMessages(retried, limit, since);
-        }
-        throw err;
+        const mapped = syncErrorResult(err, `Gmail sync failed for ${conn.email}`);
+        if (mapped.error) errors.push(mapped.error);
       }
     }
 
-    // Incremental when possible; if nothing comes back, fall back to a full recent fetch
-    // so a bad/empty lastSyncedAt window does not leave the inbox stuck at 0.
-    let gmailMessages = await load(conn?.lastSyncedAt ?? null);
-    let usedFullResync = false;
-    if (gmailMessages.length === 0 && conn?.lastSyncedAt) {
-      gmailMessages = await load(null);
-      usedFullResync = true;
-    }
-
-    if (conn?.email) {
-      await ensureEmailConnectedAccount(userId, conn.email);
-    }
-
-    const imported = await ingestMessages(
-      userId,
-      gmailMessages.map((m) => ({
-        externalId: m.externalId,
-        platformId: 'email' as const,
-        from: m.from,
-        body: m.body,
-        subject: m.subject,
-        timestamp: m.timestamp,
-      })),
-      'gmail'
-    );
-
-    await db
-      .update(gmailConnections)
-      .set({ lastSyncedAt: new Date() })
-      .where(eq(gmailConnections.userId, userId));
-
-    if (imported === 0 && gmailMessages.length === 0) {
-      return {
-        imported: 0,
-        info: 'No inbox messages returned from Gmail. Confirm Gmail API is enabled and try Sync again.',
-      };
-    }
-
-    if (imported === 0 && gmailMessages.length > 0) {
-      return {
-        imported: 0,
-        info: usedFullResync
-          ? 'Gmail messages already imported (no new mail).'
-          : 'No new Gmail messages since last sync.',
-      };
+    if (imported === 0 && errors.length === conns.length) {
+      return { imported: 0, error: errors.join(' · ') };
     }
 
     return {
       imported,
-      info: usedFullResync ? 'Completed a full recent inbox resync.' : undefined,
+      info: [...infos, ...errors].filter(Boolean).join(' · ') || undefined,
+      error: imported === 0 && errors.length ? errors.join(' · ') : undefined,
     };
   } catch (err) {
     return syncErrorResult(err, 'Gmail sync failed');

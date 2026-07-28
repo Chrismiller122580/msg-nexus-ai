@@ -2,48 +2,56 @@
 
 import { getDb, twilioConnections } from '@/db';
 import { requireUser } from '@/lib/session';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   getTwilioEnvPhoneNumber,
   isTwilioConfigured,
   isTwilioSendConfigured,
   normalizePhoneNumber,
-  phonesMatch,
 } from '@/lib/twilio';
 import { sendSmsForUser } from '@/lib/sms-send';
 import { syncTwilioForUser } from '@/lib/twilio-sync';
 import { revalidatePath } from 'next/cache';
+import type { ConnectionRow } from '@/app/actions/gmail';
 
 export async function getTwilioStatus() {
   const user = await requireUser();
   const db = getDb();
   const serverPhone = getTwilioEnvPhoneNumber();
 
-  const [conn] = await db
+  const rows = await db
     .select({
+      id: twilioConnections.id,
       phoneNumber: twilioConnections.phoneNumber,
       lastSyncedAt: twilioConnections.lastSyncedAt,
       connectedAt: twilioConnections.connectedAt,
     })
     .from(twilioConnections)
-    .where(eq(twilioConnections.userId, user.id))
-    .limit(1);
+    .where(eq(twilioConnections.userId, user.id));
+
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.phoneNumber,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
 
   return {
     configured: isTwilioConfigured(),
     sendConfigured: isTwilioSendConfigured(),
-    connected: Boolean(conn),
-    phoneNumber: conn?.phoneNumber,
-    identifier: conn?.phoneNumber,
+    connected: connections.length > 0,
+    phoneNumber: connections[0]?.identifier,
+    identifier: connections[0]?.identifier,
     serverPhone: serverPhone ?? undefined,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
-    connectedAt: conn?.connectedAt?.toISOString(),
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connectedAt: connections[0]?.connectedAt,
+    connections,
   };
 }
 
 /**
- * Connect SMS. Prefer the server TWILIO_PHONE_NUMBER (the line that owns history).
- * Optional phoneNumber is accepted when it matches the server line, or when env is unset.
+ * Connect an SMS line. Accepts any E.164 number; prefers TWILIO_PHONE_NUMBER when empty.
+ * Multiple numbers per user are allowed (unique per user + phone).
  */
 export async function connectTwilioAction(
   phoneNumber?: string
@@ -56,16 +64,12 @@ export async function connectTwilioAction(
 
     const envLine = getTwilioEnvPhoneNumber();
     const entered = phoneNumber?.trim() ? normalizePhoneNumber(phoneNumber.trim()) : '';
+    const line = entered || envLine;
 
-    let line = envLine || entered;
-    if (envLine && entered && !phonesMatch(envLine, entered)) {
-      // Single-tenant: always bind to the server Twilio number for sync/webhooks
-      line = envLine;
-    }
     if (!line || line.replace(/\D/g, '').length < 10) {
       return {
         error:
-          'Set TWILIO_PHONE_NUMBER on the server, or enter your Twilio number in E.164 (e.g. +15551234567).',
+          'Enter a phone number in E.164 (e.g. +15551234567), or set TWILIO_PHONE_NUMBER on the server.',
       };
     }
 
@@ -73,15 +77,10 @@ export async function connectTwilioAction(
     const existing = await db
       .select({ id: twilioConnections.id })
       .from(twilioConnections)
-      .where(eq(twilioConnections.userId, user.id))
+      .where(and(eq(twilioConnections.userId, user.id), eq(twilioConnections.phoneNumber, line)))
       .limit(1);
 
-    if (existing.length > 0) {
-      await db
-        .update(twilioConnections)
-        .set({ phoneNumber: line })
-        .where(eq(twilioConnections.userId, user.id));
-    } else {
+    if (existing.length === 0) {
       await db.insert(twilioConnections).values({
         userId: user.id,
         phoneNumber: line,
@@ -96,10 +95,16 @@ export async function connectTwilioAction(
   }
 }
 
-export async function disconnectTwilioAction() {
+export async function disconnectTwilioAction(connectionId?: number) {
   const user = await requireUser();
   const db = getDb();
-  await db.delete(twilioConnections).where(eq(twilioConnections.userId, user.id));
+  if (connectionId != null) {
+    await db
+      .delete(twilioConnections)
+      .where(and(eq(twilioConnections.userId, user.id), eq(twilioConnections.id, connectionId)));
+  } else {
+    await db.delete(twilioConnections).where(eq(twilioConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }

@@ -10,23 +10,30 @@ export async function syncXForUser(
   limit = SYNC_BATCH_SIZE
 ): Promise<SyncResult> {
   try {
-    const token = await getValidXToken(userId);
-    if (!token) return { imported: 0, error: 'X is not connected.' };
-
     const db = getDb();
-    const [conn] = await db.select().from(xConnections).where(eq(xConnections.userId, userId)).limit(1);
-    if (conn) {
+    const conns = await db.select().from(xConnections).where(eq(xConnections.userId, userId));
+    if (conns.length === 0) return { imported: 0, error: 'X is not connected.' };
+
+    let imported = 0;
+    for (const conn of conns) {
+      const token = await getValidXToken(userId, { connectionId: conn.id });
+      if (!token) continue;
+
       await ensureConnectedAccount(userId, 'x', conn.userName, 'X');
+
+      const messages = await fetchRecentXDMs(token, limit);
+      imported += await ingestMessages(
+        userId,
+        messages.map((m) => ({ ...m, platformId: 'x' as const })),
+        `x-${conn.id}`
+      );
+
+      await db
+        .update(xConnections)
+        .set({ lastSyncedAt: new Date() })
+        .where(eq(xConnections.id, conn.id));
     }
 
-    const messages = await fetchRecentXDMs(token, limit);
-    const imported = await ingestMessages(
-      userId,
-      messages.map((m) => ({ ...m, platformId: 'x' as const })),
-      'x'
-    );
-
-    await db.update(xConnections).set({ lastSyncedAt: new Date() }).where(eq(xConnections.userId, userId));
     return { imported };
   } catch (err) {
     return syncErrorResult(err, 'X sync failed');

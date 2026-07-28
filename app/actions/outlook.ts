@@ -2,39 +2,54 @@
 
 import { getDb, outlookConnections } from '@/db';
 import { requireUser } from '@/lib/session';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { isMicrosoftConfigured } from '@/lib/microsoft';
 import { syncOutlookForUser } from '@/lib/microsoft-sync';
 import { revalidatePath } from 'next/cache';
+import type { ConnectionRow } from '@/app/actions/gmail';
 
 export async function getOutlookStatus() {
   const user = await requireUser();
   const db = getDb();
 
-  const [conn] = await db
+  const rows = await db
     .select({
+      id: outlookConnections.id,
       email: outlookConnections.email,
       lastSyncedAt: outlookConnections.lastSyncedAt,
       connectedAt: outlookConnections.connectedAt,
     })
     .from(outlookConnections)
-    .where(eq(outlookConnections.userId, user.id))
-    .limit(1);
+    .where(eq(outlookConnections.userId, user.id));
+
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.email,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
 
   return {
     configured: isMicrosoftConfigured(),
-    connected: Boolean(conn),
-    email: conn?.email,
-    identifier: conn?.email,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
-    connectedAt: conn?.connectedAt?.toISOString(),
+    connected: connections.length > 0,
+    email: connections[0]?.identifier,
+    identifier: connections[0]?.identifier,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connectedAt: connections[0]?.connectedAt,
+    connections,
   };
 }
 
-export async function disconnectOutlookAction() {
+export async function disconnectOutlookAction(connectionId?: number) {
   const user = await requireUser();
   const db = getDb();
-  await db.delete(outlookConnections).where(eq(outlookConnections.userId, user.id));
+  if (connectionId != null) {
+    await db
+      .delete(outlookConnections)
+      .where(and(eq(outlookConnections.userId, user.id), eq(outlookConnections.id, connectionId)));
+  } else {
+    await db.delete(outlookConnections).where(eq(outlookConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
@@ -48,7 +63,7 @@ export async function syncOutlookAction(): Promise<{
   try {
     const user = await requireUser();
     const result = await syncOutlookForUser(user.id);
-    if (result.error) return { error: result.error };
+    if (result.error && (result.imported ?? 0) === 0) return { error: result.error };
 
     revalidatePath('/inbox');
     revalidatePath('/settings');

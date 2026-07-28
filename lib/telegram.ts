@@ -30,16 +30,11 @@ export async function ensureTelegramWebhook(): Promise<{ ok: boolean; error?: st
   return { ok: true };
 }
 
+/** Always creates a new pending link row so users can add multiple Telegram chats. */
 export async function createTelegramLinkCode(userId: number): Promise<string> {
   const db = getDb();
   const code = generateTelegramLinkCode();
-  const existing = await db.select().from(telegramConnections).where(eq(telegramConnections.userId, userId)).limit(1);
-
-  if (existing.length > 0) {
-    await db.update(telegramConnections).set({ linkCode: code }).where(eq(telegramConnections.userId, userId));
-  } else {
-    await db.insert(telegramConnections).values({ userId, linkCode: code });
-  }
+  await db.insert(telegramConnections).values({ userId, linkCode: code });
   return code;
 }
 
@@ -53,11 +48,14 @@ export async function linkTelegramChat(linkCode: string, chatId: string, userNam
 
   if (!conn) return false;
 
-  await db.update(telegramConnections).set({
-    chatId,
-    userName: userName || chatId,
-    linkCode: null,
-  }).where(eq(telegramConnections.userId, conn.userId));
+  await db
+    .update(telegramConnections)
+    .set({
+      chatId,
+      userName: userName || chatId,
+      linkCode: null,
+    })
+    .where(eq(telegramConnections.id, conn.id));
 
   return true;
 }

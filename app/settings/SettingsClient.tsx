@@ -26,6 +26,13 @@ import {
   startTelegramLinkAction, connectWhatsAppAction,
 } from '@/app/actions/platforms';
 
+type ConnectionItem = {
+  id: number;
+  identifier: string;
+  lastSyncedAt?: string;
+  connectedAt?: string;
+};
+
 type Status = {
   configured: boolean;
   connected: boolean;
@@ -33,6 +40,7 @@ type Status = {
   linkCode?: string;
   lastSyncedAt?: string;
   serverPhone?: string;
+  connections?: ConnectionItem[];
 };
 
 export default function SettingsClient() {
@@ -51,14 +59,14 @@ export default function SettingsClient() {
   const [testSmsSending, setTestSmsSending] = useState(false);
   const [waPhone, setWaPhone] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
-  const [gmail, setGmail] = useState<Status>({ configured: false, connected: false });
-  const [outlook, setOutlook] = useState<Status>({ configured: false, connected: false });
-  const [twilio, setTwilio] = useState<Status>({ configured: false, connected: false });
-  const [slack, setSlack] = useState<Status>({ configured: false, connected: false });
-  const [discord, setDiscord] = useState<Status>({ configured: false, connected: false });
-  const [telegram, setTelegram] = useState<Status>({ configured: false, connected: false });
-  const [whatsapp, setWhatsapp] = useState<Status>({ configured: false, connected: false });
-  const [xPlatform, setXPlatform] = useState<Status>({ configured: false, connected: false });
+  const [gmail, setGmail] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [outlook, setOutlook] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [twilio, setTwilio] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [slack, setSlack] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [discord, setDiscord] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [telegram, setTelegram] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [whatsapp, setWhatsapp] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [xPlatform, setXPlatform] = useState<Status>({ configured: false, connected: false, connections: [] });
 
   async function reload() {
     const [g, o, t, p] = await Promise.all([getGmailStatus(), getOutlookStatus(), getTwilioStatus(), getAllPlatformStatuses()]);
@@ -67,12 +75,14 @@ export default function SettingsClient() {
       connected: g.connected,
       identifier: g.identifier ?? g.email,
       lastSyncedAt: g.lastSyncedAt,
+      connections: g.connections ?? [],
     });
     setOutlook({
       configured: o.configured,
       connected: o.connected,
       identifier: o.identifier ?? o.email,
       lastSyncedAt: o.lastSyncedAt,
+      connections: o.connections ?? [],
     });
     setTwilio({
       configured: t.configured,
@@ -80,16 +90,13 @@ export default function SettingsClient() {
       identifier: t.identifier ?? t.phoneNumber,
       lastSyncedAt: t.lastSyncedAt,
       serverPhone: t.serverPhone,
+      connections: t.connections ?? [],
     });
     setSlack(p.slack);
     setDiscord(p.discord);
     setTelegram(p.telegram);
     setWhatsapp(p.whatsapp);
     setXPlatform(p.x);
-    // Do not overwrite personal test-SMS destination with the Twilio line
-    if (p.whatsapp.identifier && !p.whatsapp.identifier.startsWith('wa:')) {
-      setWaPhone(p.whatsapp.identifier);
-    }
     if (p.telegram.linkCode) setTelegramCode(p.telegram.linkCode);
   }
 
@@ -285,13 +292,13 @@ export default function SettingsClient() {
             callbackPath="/api/auth/gmail/callback" oauthProviderLabel="Google Cloud Console"
             oauthInfoKey="gmail"
             status={gmail} connectHref="/api/auth/gmail" onSync={() => runSync('gmail', syncGmailAction)}
-            syncing={syncing.gmail} onDisconnect={async () => { await disconnectGmailAction(); await reload(); toast.success('Disconnected'); }} />
+            syncing={syncing.gmail} onDisconnect={async (id) => { await disconnectGmailAction(id); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<Mail className="text-sky-500" size={20} />} title="Outlook" hint="MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET"
             callbackPath="/api/auth/microsoft/callback" oauthProviderLabel="Azure Portal → App registration → Redirect URIs"
             oauthInfoKey="outlook"
             status={outlook} connectHref="/api/auth/microsoft" onSync={() => runSync('outlook', syncOutlookAction)}
-            syncing={syncing.outlook} onDisconnect={async () => { await disconnectOutlookAction(); await reload(); toast.success('Disconnected'); }}
+            syncing={syncing.outlook} onDisconnect={async (id) => { await disconnectOutlookAction(id); await reload(); toast.success('Disconnected'); }}
             extraHelp={
               <div className="text-xs text-muted-foreground space-y-1.5 rounded-xl border border-border p-3">
                 <p className="font-medium text-foreground">Azure setup checklist</p>
@@ -331,19 +338,19 @@ export default function SettingsClient() {
             callbackPath="/api/auth/slack/callback" oauthProviderLabel="api.slack.com → Your App → OAuth & Permissions"
             oauthInfoKey="slack"
             status={slack} connectHref="/api/auth/slack" onSync={() => runSync('slack', syncSlackAction)}
-            syncing={syncing.slack} onDisconnect={async () => { await disconnectSlackAction(); await reload(); toast.success('Disconnected'); }} />
+            syncing={syncing.slack} onDisconnect={async (id) => { await disconnectSlackAction(id); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<MessageCircle className="text-indigo-500" size={20} />} title="Discord" hint="DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET"
             callbackPath="/api/auth/discord/callback" oauthProviderLabel="Discord Developer Portal → OAuth2 → Redirects"
             oauthInfoKey="discord"
             status={discord} connectHref="/api/auth/discord" onSync={() => runSync('discord', syncDiscordAction)}
-            syncing={syncing.discord} onDisconnect={async () => { await disconnectDiscordAction(); await reload(); toast.success('Disconnected'); }} />
+            syncing={syncing.discord} onDisconnect={async (id) => { await disconnectDiscordAction(id); await reload(); toast.success('Disconnected'); }} />
 
           <OAuthCard icon={<AtSign className="text-foreground" size={20} />} title="X / Twitter" hint="X_CLIENT_ID, X_CLIENT_SECRET"
             callbackPath="/api/auth/x/callback" oauthProviderLabel="developer.x.com → User authentication settings"
             oauthInfoKey="x"
             status={xPlatform} connectHref="/api/auth/x" onSync={() => runSync('x', syncXAction)}
-            syncing={syncing.x} onDisconnect={async () => { await disconnectXAction(); await reload(); toast.success('Disconnected'); }} />
+            syncing={syncing.x} onDisconnect={async (id) => { await disconnectXAction(id); await reload(); toast.success('Disconnected'); }} />
 
           <div className="card p-4 sm:p-6 space-y-4">
             <div className="flex items-center gap-3 min-w-0">
@@ -360,60 +367,77 @@ export default function SettingsClient() {
             )}
             {twilio.connected ? (
               <>
-                <ConnectedActions identifier={twilio.identifier} lastSyncedAt={twilio.lastSyncedAt}
-                  onSync={() => runSync('twilio', syncTwilioAction)} syncing={syncing.twilio}
-                  onDisconnect={async () => { await disconnectTwilioAction(); await reload(); toast.success('Disconnected'); }} />
+                <MultiConnectionPanel
+                  title="SMS"
+                  connections={twilio.connections}
+                  fallbackIdentifier={twilio.identifier}
+                  fallbackLastSyncedAt={twilio.lastSyncedAt}
+                  onSync={() => runSync('twilio', syncTwilioAction)}
+                  syncing={syncing.twilio}
+                  onDisconnect={async (id) => { await disconnectTwilioAction(id); await reload(); toast.success('Disconnected'); }}
+                />
                 <div className="pt-2 border-t border-border space-y-2">
-                  <p className="text-xs text-muted-foreground">
-                    Send a test SMS <strong>from</strong> your Twilio line <strong>to a personal phone</strong> (not the Twilio number itself), then Sync.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Add another SMS number (E.164)</p>
                   <input
                     type="tel"
                     value={smsPhone}
                     onChange={(e) => setSmsPhone(e.target.value)}
-                    placeholder="Your mobile e.g. +15551234567"
+                    placeholder="+15551234567"
                     className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm"
                   />
-                  <button
-                    disabled={testSmsSending || !twilio.configured || !smsPhone.trim()}
-                    onClick={async () => {
-                      const to = smsPhone.trim();
-                      if (!to) { toast.error('Enter a personal phone to receive the test'); return; }
-                      setTestSmsSending(true);
-                      try {
-                        const res = await fetch('/api/sms/send', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            to,
-                            message: 'Hello from MsgNexus! 📱',
-                          }),
-                        });
-                        const text = await res.text();
-                        const data = text ? JSON.parse(text) : {};
-                        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                        toast.success('SMS sent — syncing…');
-                        await runSync('twilio', syncTwilioAction);
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : 'Send failed');
-                      } finally {
-                        setTestSmsSending(false);
-                      }
-                    }}
-                    className="btn btn-secondary text-sm disabled:opacity-50"
-                  >
-                    {testSmsSending ? <><Loader2 className="animate-spin" size={14} /> Sending…</> : <>📨 Send Test SMS</>}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={async () => {
+                        const r = await connectTwilioAction(smsPhone || undefined);
+                        if (r.error) toast.error(r.error);
+                        else {
+                          toast.success(`SMS connected${r.phoneNumber ? ` as ${r.phoneNumber}` : ''}`);
+                          setSmsPhone('');
+                          await reload();
+                          await runSync('twilio', syncTwilioAction);
+                        }
+                      }}
+                      disabled={!twilio.configured}
+                      className="btn btn-secondary text-sm disabled:opacity-50"
+                    >
+                      Add number
+                    </button>
+                    <button
+                      disabled={testSmsSending || !twilio.configured || !smsPhone.trim()}
+                      onClick={async () => {
+                        const to = smsPhone.trim();
+                        if (!to) { toast.error('Enter a personal phone to receive the test'); return; }
+                        setTestSmsSending(true);
+                        try {
+                          const res = await fetch('/api/sms/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to, message: 'Hello from MsgNexus! 📱' }),
+                          });
+                          const text = await res.text();
+                          const data = text ? JSON.parse(text) : {};
+                          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                          toast.success('SMS sent — syncing…');
+                          await runSync('twilio', syncTwilioAction);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Send failed');
+                        } finally {
+                          setTestSmsSending(false);
+                        }
+                      }}
+                      className="btn btn-secondary text-sm disabled:opacity-50"
+                    >
+                      {testSmsSending ? <><Loader2 className="animate-spin" size={14} /> Sending…</> : <>📨 Send Test SMS</>}
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Connects the server line <code className="bg-muted px-1 rounded">TWILIO_PHONE_NUMBER</code>
-                  {twilio.serverPhone ? (
-                    <> (<code className="bg-muted px-1 rounded">{twilio.serverPhone}</code>)</>
-                  ) : null}
-                  . Optional: confirm the same E.164 number below.
+                  Connect a Twilio line (defaults to <code className="bg-muted px-1 rounded">TWILIO_PHONE_NUMBER</code>
+                  {twilio.serverPhone ? <> = <code className="bg-muted px-1 rounded">{twilio.serverPhone}</code></> : null}
+                  ). You can add more numbers later.
                 </p>
                 <input type="tel" value={smsPhone} onChange={(e) => setSmsPhone(e.target.value)} placeholder="+15551234567 (optional if env set)"
                   className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm" disabled={!twilio.configured} />
@@ -454,7 +478,7 @@ export default function SettingsClient() {
               }
             }}
             onSync={() => runSync('whatsapp', syncWhatsAppAction)} syncing={syncing.whatsapp}
-            onDisconnect={async () => { await disconnectWhatsAppAction(); await reload(); toast.success('Disconnected'); }}
+            onDisconnect={async (id) => { await disconnectWhatsAppAction(id); await reload(); toast.success('Disconnected'); }}
             webhookUrl={`${webhookBase}/api/webhooks/whatsapp`}
             extraNote="WhatsApp has no history API — Sync will not pull old chats. In Meta Developer → WhatsApp → Configuration, set Callback URL to the webhook below, Verify token = WHATSAPP_VERIFY_TOKEN, subscribe to messages, then text your Business number."
           />
@@ -466,29 +490,36 @@ export default function SettingsClient() {
               </div>
               <div>
                 <h2 className="font-semibold">Telegram</h2>
-                <p className="text-sm text-muted-foreground">Link via bot · TELEGRAM_BOT_TOKEN</p>
+                <p className="text-sm text-muted-foreground">Link via bot · multiple chats OK</p>
               </div>
             </div>
             {!telegram.configured && <p className="text-sm text-amber-600">Server needs TELEGRAM_BOT_TOKEN (+ TELEGRAM_BOT_USERNAME).</p>}
-            {telegram.connected ? (
-              <ConnectedActions identifier={telegram.identifier} lastSyncedAt={telegram.lastSyncedAt}
-                onSync={() => runSync('telegram', syncTelegramAction)} syncing={syncing.telegram}
-                onDisconnect={async () => { await disconnectTelegramAction(); await reload(); toast.success('Disconnected'); }} />
-            ) : (
-              <div className="space-y-3">
-                <button disabled={!telegram.configured} onClick={async () => {
-                  const r = await startTelegramLinkAction();
-                  if (r.error) toast.error(r.error);
-                  else if (r.linkCode) {
-                    setTelegramCode(r.linkCode);
-                    toast.success(`Send /link ${r.linkCode} to @${r.botUsername} on Telegram`);
-                  }
-                }} className="btn btn-primary text-sm disabled:opacity-50">Generate link code</button>
-                {telegramCode && (
-                  <p className="text-sm">Send to bot: <code className="bg-muted px-2 py-1 rounded">/link {telegramCode}</code></p>
-                )}
-              </div>
+            {telegram.connected && (
+              <MultiConnectionPanel
+                title="Telegram"
+                connections={telegram.connections}
+                fallbackIdentifier={telegram.identifier}
+                fallbackLastSyncedAt={telegram.lastSyncedAt}
+                onSync={() => runSync('telegram', syncTelegramAction)}
+                syncing={syncing.telegram}
+                onDisconnect={async (id) => { await disconnectTelegramAction(id); await reload(); toast.success('Disconnected'); }}
+              />
             )}
+            <div className="space-y-3">
+              <button disabled={!telegram.configured} onClick={async () => {
+                const r = await startTelegramLinkAction();
+                if (r.error) toast.error(r.error);
+                else if (r.linkCode) {
+                  setTelegramCode(r.linkCode);
+                  toast.success(`Send /link ${r.linkCode} to @${r.botUsername} on Telegram`);
+                }
+              }} className="btn btn-primary text-sm disabled:opacity-50">
+                {telegram.connected ? 'Link another chat' : 'Generate link code'}
+              </button>
+              {telegramCode && (
+                <p className="text-sm">Send to bot: <code className="bg-muted px-2 py-1 rounded">/link {telegramCode}</code></p>
+              )}
+            </div>
             {telegram.configured && (
               <p className="text-xs text-muted-foreground">Webhook: <code className="break-all">{webhookBase}/api/webhooks/telegram</code></p>
             )}
@@ -506,7 +537,8 @@ export default function SettingsClient() {
 
 function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, onDisconnect, callbackPath, oauthProviderLabel, oauthInfoKey, extraHelp }: {
   icon: ReactNode; title: string; hint: string; status: Status;
-  connectHref: string; onSync: () => void; syncing?: boolean; onDisconnect: () => void;
+  connectHref: string; onSync: () => void; syncing?: boolean;
+  onDisconnect: (connectionId?: number) => void;
   callbackPath?: string; oauthProviderLabel?: string; oauthInfoKey?: string; extraHelp?: ReactNode;
 }) {
   const [callbackUrl, setCallbackUrl] = useState('');
@@ -633,8 +665,17 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
       )}
       {extraHelp}
       {status.connected ? (
-        <ConnectedActions identifier={status.identifier} lastSyncedAt={status.lastSyncedAt}
-          onSync={onSync} syncing={syncing} onDisconnect={onDisconnect} />
+        <MultiConnectionPanel
+          title={title}
+          connections={status.connections}
+          fallbackIdentifier={status.identifier}
+          fallbackLastSyncedAt={status.lastSyncedAt}
+          onSync={onSync}
+          syncing={syncing}
+          onDisconnect={onDisconnect}
+          addHref={status.configured ? connectHref : undefined}
+          addLabel={`Add another ${title}`}
+        />
       ) : (
         <a href={status.configured ? connectHref : '#'} className={`btn btn-primary text-sm inline-flex ${!status.configured ? 'opacity-50 pointer-events-none' : ''}`}>
           Connect {title}
@@ -647,19 +688,37 @@ function OAuthCard({ icon, title, hint, status, connectHref, onSync, syncing, on
 function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSync, syncing, onDisconnect, webhookUrl, extraNote }: {
   icon: ReactNode; title: string; hint: string; status: Status;
   phone: string; setPhone: (v: string) => void;
-  onConnect: () => void; onSync: () => void; syncing?: boolean; onDisconnect: () => void; webhookUrl: string;
+  onConnect: () => void; onSync: () => void; syncing?: boolean;
+  onDisconnect: (connectionId?: number) => void; webhookUrl: string;
   extraNote?: string;
 }) {
   return (
     <div className="card p-4 sm:p-6 space-y-4">
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-10 h-10 rounded-2xl bg-muted flex items-center justify-center shrink-0">{icon}</div>
-        <div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">Phone + webhook</p></div>
+        <div className="min-w-0"><h2 className="font-semibold">{title}</h2><p className="text-sm text-muted-foreground">Phone + webhook · multiple numbers OK</p></div>
       </div>
       {!status.configured && <p className="text-sm text-amber-600">Server needs <code className="text-xs">{hint}</code></p>}
       {status.connected ? (
-        <ConnectedActions identifier={status.identifier} lastSyncedAt={status.lastSyncedAt}
-          onSync={onSync} syncing={syncing} onDisconnect={onDisconnect} />
+        <>
+          <MultiConnectionPanel
+            title={title}
+            connections={status.connections}
+            fallbackIdentifier={status.identifier}
+            fallbackLastSyncedAt={status.lastSyncedAt}
+            onSync={onSync}
+            syncing={syncing}
+            onDisconnect={onDisconnect}
+          />
+          <div className="space-y-2 pt-2 border-t border-border">
+            <p className="text-xs text-muted-foreground">Add another number</p>
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 123 4567"
+              className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm" disabled={!status.configured} />
+            <button onClick={onConnect} disabled={!status.configured} className="btn btn-secondary text-sm disabled:opacity-50">
+              Add {title} number
+            </button>
+          </div>
+        </>
       ) : (
         <div className="space-y-3">
           <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 123 4567 (optional)"
@@ -673,20 +732,72 @@ function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSy
   );
 }
 
-function ConnectedActions({ identifier, lastSyncedAt, onSync, syncing, onDisconnect }: {
-  identifier?: string; lastSyncedAt?: string; onSync: () => void; syncing?: boolean; onDisconnect: () => void;
+function MultiConnectionPanel({
+  title,
+  connections,
+  fallbackIdentifier,
+  fallbackLastSyncedAt,
+  onSync,
+  syncing,
+  onDisconnect,
+  addHref,
+  addLabel,
+}: {
+  title: string;
+  connections?: ConnectionItem[];
+  fallbackIdentifier?: string;
+  fallbackLastSyncedAt?: string;
+  onSync: () => void;
+  syncing?: boolean;
+  onDisconnect: (connectionId?: number) => void;
+  addHref?: string;
+  addLabel?: string;
 }) {
+  const list =
+    connections && connections.length > 0
+      ? connections
+      : fallbackIdentifier
+        ? [{ id: 0, identifier: fallbackIdentifier, lastSyncedAt: fallbackLastSyncedAt }]
+        : [];
+
   return (
     <div className="space-y-3">
-      <p className="text-sm">
-        Connected as <span className="font-medium">{identifier}</span>
-        {lastSyncedAt && <span className="text-muted-foreground"> · Last sync {new Date(lastSyncedAt).toLocaleString()}</span>}
+      <p className="text-xs text-muted-foreground">
+        {list.length} {title} connection{list.length === 1 ? '' : 's'} — add more anytime.
       </p>
+      <ul className="space-y-2">
+        {list.map((c) => (
+          <li
+            key={c.id || c.identifier}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 px-3 py-2 text-sm"
+          >
+            <div className="min-w-0">
+              <div className="font-medium truncate">{c.identifier}</div>
+              {c.lastSyncedAt && (
+                <div className="text-[11px] text-muted-foreground">
+                  Last sync {new Date(c.lastSyncedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onDisconnect(c.id || undefined)}
+              className="btn btn-secondary text-xs shrink-0"
+            >
+              <Unplug size={14} /> Disconnect
+            </button>
+          </li>
+        ))}
+      </ul>
       <div className="flex flex-wrap gap-2">
         <button onClick={onSync} disabled={syncing} className="btn btn-primary text-sm disabled:opacity-70">
-          {syncing ? <><Loader2 className="animate-spin" size={16} /> Syncing...</> : <><RefreshCw size={16} /> Sync now</>}
+          {syncing ? <><Loader2 className="animate-spin" size={16} /> Syncing...</> : <><RefreshCw size={16} /> Sync all</>}
         </button>
-        <button onClick={onDisconnect} className="btn btn-secondary text-sm"><Unplug size={16} /> Disconnect</button>
+        {addHref && (
+          <a href={addHref} className="btn btn-secondary text-sm inline-flex">
+            {addLabel || 'Add another'}
+          </a>
+        )}
       </div>
     </div>
   );

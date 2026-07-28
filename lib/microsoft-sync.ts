@@ -9,86 +9,110 @@ export async function ensureOutlookConnectedAccount(userId: number, email: strin
   await ensureConnectedAccount(userId, 'email', email, 'Outlook');
 }
 
+async function syncOneOutlookConnection(
+  userId: number,
+  conn: typeof outlookConnections.$inferSelect,
+  limit: number
+): Promise<SyncResult> {
+  let accessToken = await getValidMicrosoftToken(userId, { connectionId: conn.id });
+  if (!accessToken) {
+    return { imported: 0, error: `Outlook ${conn.email} is not connected.` };
+  }
+
+  async function load(since: Date | null) {
+    try {
+      return await fetchRecentOutlookMessages(accessToken!, limit, since);
+    } catch (err) {
+      if (err instanceof Error && /session expired|401|expired/i.test(err.message)) {
+        const retried = await getValidMicrosoftToken(userId, {
+          forceRefresh: true,
+          connectionId: conn.id,
+        });
+        if (!retried) throw err;
+        accessToken = retried;
+        return await fetchRecentOutlookMessages(retried, limit, since);
+      }
+      throw err;
+    }
+  }
+
+  let outlookMessages = await load(conn.lastSyncedAt ?? null);
+  let usedFullResync = false;
+  if (outlookMessages.length === 0 && conn.lastSyncedAt) {
+    outlookMessages = await load(null);
+    usedFullResync = true;
+  }
+
+  await ensureOutlookConnectedAccount(userId, conn.email);
+
+  const imported = await ingestMessages(
+    userId,
+    outlookMessages.map((m) => ({
+      externalId: m.externalId,
+      platformId: 'email' as const,
+      from: m.from,
+      body: m.body,
+      subject: m.subject,
+      timestamp: m.timestamp,
+    })),
+    `outlook-${conn.id}`
+  );
+
+  const db = getDb();
+  await db
+    .update(outlookConnections)
+    .set({ lastSyncedAt: new Date() })
+    .where(eq(outlookConnections.id, conn.id));
+
+  if (imported === 0 && outlookMessages.length === 0) {
+    return { imported: 0, info: `No Outlook messages for ${conn.email}.` };
+  }
+
+  return {
+    imported,
+    info: usedFullResync ? `Full resync for ${conn.email}.` : undefined,
+  };
+}
+
 export async function syncOutlookForUser(
   userId: number,
   limit = SYNC_BATCH_SIZE
 ): Promise<SyncResult> {
   try {
-    let accessToken = await getValidMicrosoftToken(userId);
-    if (!accessToken) {
+    const db = getDb();
+    const conns = await db
+      .select()
+      .from(outlookConnections)
+      .where(eq(outlookConnections.userId, userId));
+
+    if (conns.length === 0) {
       return { imported: 0, error: 'Outlook is not connected.' };
     }
 
-    const db = getDb();
+    let imported = 0;
+    const infos: string[] = [];
+    const errors: string[] = [];
 
-    const [conn] = await db
-      .select({ email: outlookConnections.email, lastSyncedAt: outlookConnections.lastSyncedAt })
-      .from(outlookConnections)
-      .where(eq(outlookConnections.userId, userId))
-      .limit(1);
-
-    async function load(since: Date | null) {
+    for (const conn of conns) {
       try {
-        return await fetchRecentOutlookMessages(accessToken!, limit, since);
+        const r = await syncOneOutlookConnection(userId, conn, limit);
+        imported += r.imported;
+        if (r.error) errors.push(r.error);
+        if (r.info) infos.push(r.info);
       } catch (err) {
-        if (err instanceof Error && /session expired|401|expired/i.test(err.message)) {
-          const retried = await getValidMicrosoftToken(userId, { forceRefresh: true });
-          if (!retried) throw err;
-          accessToken = retried;
-          return await fetchRecentOutlookMessages(retried, limit, since);
-        }
-        throw err;
+        const mapped = syncErrorResult(err, `Outlook sync failed for ${conn.email}`);
+        if (mapped.error) errors.push(mapped.error);
       }
     }
 
-    let outlookMessages = await load(conn?.lastSyncedAt ?? null);
-    let usedFullResync = false;
-    if (outlookMessages.length === 0 && conn?.lastSyncedAt) {
-      outlookMessages = await load(null);
-      usedFullResync = true;
-    }
-
-    if (conn?.email) {
-      await ensureOutlookConnectedAccount(userId, conn.email);
-    }
-
-    const imported = await ingestMessages(
-      userId,
-      outlookMessages.map((m) => ({
-        externalId: m.externalId,
-        platformId: 'email' as const,
-        from: m.from,
-        body: m.body,
-        subject: m.subject,
-        timestamp: m.timestamp,
-      })),
-      'outlook'
-    );
-
-    await db
-      .update(outlookConnections)
-      .set({ lastSyncedAt: new Date() })
-      .where(eq(outlookConnections.userId, userId));
-
-    if (imported === 0 && outlookMessages.length === 0) {
-      return {
-        imported: 0,
-        info: 'No Outlook messages returned. Confirm Mail.Read consent and try Sync again.',
-      };
-    }
-
-    if (imported === 0 && outlookMessages.length > 0) {
-      return {
-        imported: 0,
-        info: usedFullResync
-          ? 'Outlook messages already imported (no new mail).'
-          : 'No new Outlook messages since last sync.',
-      };
+    if (imported === 0 && errors.length === conns.length) {
+      return { imported: 0, error: errors.join(' · ') };
     }
 
     return {
       imported,
-      info: usedFullResync ? 'Completed a full recent inbox resync.' : undefined,
+      info: [...infos, ...errors].filter(Boolean).join(' · ') || undefined,
+      error: imported === 0 && errors.length ? errors.join(' · ') : undefined,
     };
   } catch (err) {
     return syncErrorResult(err, 'Outlook sync failed');

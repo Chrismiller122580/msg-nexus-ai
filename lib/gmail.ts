@@ -1,5 +1,5 @@
 import { getDb, gmailConnections } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import { getGoogleClientSecret, isGoogleOAuthConfigured } from '@/lib/google-oauth';
 import {
@@ -102,15 +102,20 @@ async function refreshAccessToken(refreshToken: string) {
 
 export async function getValidAccessToken(
   userId: number,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; connectionId?: number }
 ): Promise<string | null> {
   const db = getDb();
-  const [conn] = await db
+  const rows = await db
     .select()
     .from(gmailConnections)
-    .where(eq(gmailConnections.userId, userId))
+    .where(
+      opts?.connectionId
+        ? and(eq(gmailConnections.userId, userId), eq(gmailConnections.id, opts.connectionId))
+        : eq(gmailConnections.userId, userId)
+    )
     .limit(1);
 
+  const conn = rows[0];
   if (!conn) return null;
 
   return resolveAccessToken({
@@ -124,7 +129,7 @@ export async function getValidAccessToken(
       await db
         .update(gmailConnections)
         .set({ accessToken, expiresAt })
-        .where(eq(gmailConnections.userId, userId));
+        .where(eq(gmailConnections.id, conn.id));
     },
   });
 }

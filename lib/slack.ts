@@ -1,5 +1,5 @@
 import { getDb, slackConnections } from '@/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getOAuthCallbackUrl } from '@/lib/app-url';
 import {
   formatSlackOldest,
@@ -78,10 +78,19 @@ async function refreshSlackToken(refreshToken: string) {
 
 export async function getValidSlackToken(
   userId: number,
-  opts?: { forceRefresh?: boolean }
+  opts?: { forceRefresh?: boolean; connectionId?: number }
 ): Promise<string | null> {
   const db = getDb();
-  const [conn] = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(slackConnections)
+    .where(
+      opts?.connectionId
+        ? and(eq(slackConnections.userId, userId), eq(slackConnections.id, opts.connectionId))
+        : eq(slackConnections.userId, userId)
+    )
+    .limit(1);
+  const conn = rows[0];
   if (!conn) return null;
 
   return resolveAccessToken({
@@ -103,7 +112,7 @@ export async function getValidSlackToken(
         accessToken,
         refreshToken: refreshToken ?? conn.refreshToken,
         expiresAt,
-      }).where(eq(slackConnections.userId, userId));
+      }).where(eq(slackConnections.id, conn.id));
     },
   });
 }

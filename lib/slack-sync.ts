@@ -10,35 +10,43 @@ export async function syncSlackForUser(
   limit = SYNC_BATCH_SIZE
 ): Promise<SyncResult> {
   try {
-    const token = await getValidSlackToken(userId);
-    if (!token) return { imported: 0, error: 'Slack is not connected.' };
-
     const db = getDb();
-    const [conn] = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId)).limit(1);
-    if (conn) {
+    const conns = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId));
+    if (conns.length === 0) return { imported: 0, error: 'Slack is not connected.' };
+
+    let imported = 0;
+    for (const conn of conns) {
+      let token = await getValidSlackToken(userId, { connectionId: conn.id });
+      if (!token) continue;
+
       await ensureConnectedAccount(userId, 'slack', conn.userName, conn.teamName || 'Slack');
-    }
 
-    let messages;
-    try {
-      messages = await fetchRecentSlackMessages(token, limit, conn?.lastSyncedAt ?? null);
-    } catch (err) {
-      if (err instanceof Error && /session expired|expired|invalid_auth/i.test(err.message)) {
-        const retried = await getValidSlackToken(userId, { forceRefresh: true });
-        if (!retried) return { imported: 0, error: 'Slack is not connected.' };
-        messages = await fetchRecentSlackMessages(retried, limit, conn?.lastSyncedAt ?? null);
-      } else {
-        throw err;
+      let messages;
+      try {
+        messages = await fetchRecentSlackMessages(token, limit, conn.lastSyncedAt ?? null);
+      } catch (err) {
+        if (err instanceof Error && /session expired|expired|invalid_auth/i.test(err.message)) {
+          const retried = await getValidSlackToken(userId, { forceRefresh: true, connectionId: conn.id });
+          if (!retried) continue;
+          token = retried;
+          messages = await fetchRecentSlackMessages(retried, limit, conn.lastSyncedAt ?? null);
+        } else {
+          throw err;
+        }
       }
+
+      imported += await ingestMessages(
+        userId,
+        messages.map((m) => ({ ...m, platformId: 'slack' as const })),
+        `slack-${conn.id}`
+      );
+
+      await db
+        .update(slackConnections)
+        .set({ lastSyncedAt: new Date() })
+        .where(eq(slackConnections.id, conn.id));
     }
 
-    const imported = await ingestMessages(
-      userId,
-      messages.map((m) => ({ ...m, platformId: 'slack' as const })),
-      'slack'
-    );
-
-    await db.update(slackConnections).set({ lastSyncedAt: new Date() }).where(eq(slackConnections.userId, userId));
     return { imported };
   } catch (err) {
     return syncErrorResult(err, 'Slack sync failed');

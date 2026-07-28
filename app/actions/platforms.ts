@@ -1,8 +1,15 @@
 'use server';
 
-import { getDb, slackConnections, discordConnections, telegramConnections, whatsappConnections, xConnections } from '@/db';
+import {
+  getDb,
+  slackConnections,
+  discordConnections,
+  telegramConnections,
+  whatsappConnections,
+  xConnections,
+} from '@/db';
 import { requireUser } from '@/lib/session';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { isSlackConfigured } from '@/lib/slack';
 import { syncSlackForUser } from '@/lib/slack-sync';
@@ -14,6 +21,7 @@ import { isWhatsAppConfigured, normalizeWhatsAppPhone } from '@/lib/whatsapp';
 import { syncWhatsAppForUser } from '@/lib/whatsapp-sync';
 import { isXConfigured } from '@/lib/x-api';
 import { syncXForUser } from '@/lib/x-sync';
+import type { ConnectionRow } from '@/app/actions/gmail';
 
 type PlatformStatus = {
   configured: boolean;
@@ -21,61 +29,105 @@ type PlatformStatus = {
   identifier?: string;
   linkCode?: string;
   lastSyncedAt?: string;
+  connections: ConnectionRow[];
 };
 
 async function getSlackStatusForUser(userId: number): Promise<PlatformStatus> {
   const db = getDb();
-  const [conn] = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId)).limit(1);
+  const rows = await db.select().from(slackConnections).where(eq(slackConnections.userId, userId));
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.teamName ? `${r.userName} · ${r.teamName}` : r.userName,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
   return {
     configured: isSlackConfigured(),
-    connected: Boolean(conn),
-    identifier: conn?.userName,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
+    connected: connections.length > 0,
+    identifier: connections[0]?.identifier,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connections,
   };
 }
 
 async function getDiscordStatusForUser(userId: number): Promise<PlatformStatus> {
   const db = getDb();
-  const [conn] = await db.select().from(discordConnections).where(eq(discordConnections.userId, userId)).limit(1);
+  const rows = await db.select().from(discordConnections).where(eq(discordConnections.userId, userId));
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.userName,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
   return {
     configured: isDiscordConfigured(),
-    connected: Boolean(conn),
-    identifier: conn?.userName,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
+    connected: connections.length > 0,
+    identifier: connections[0]?.identifier,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connections,
   };
 }
 
 async function getTelegramStatusForUser(userId: number): Promise<PlatformStatus> {
   const db = getDb();
-  const [conn] = await db.select().from(telegramConnections).where(eq(telegramConnections.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(telegramConnections)
+    .where(eq(telegramConnections.userId, userId));
+  const linked = rows.filter((r: (typeof rows)[number]) => r.chatId);
+  const pending = rows.find((r: (typeof rows)[number]) => r.linkCode && !r.chatId);
+  const connections: ConnectionRow[] = linked.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.userName || r.chatId || `tg-${r.id}`,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
   return {
     configured: isTelegramConfigured(),
-    connected: Boolean(conn?.chatId),
-    identifier: conn?.userName,
-    linkCode: conn?.linkCode || undefined,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
+    connected: connections.length > 0,
+    identifier: connections[0]?.identifier,
+    linkCode: pending?.linkCode || undefined,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connections,
   };
 }
 
 async function getWhatsAppStatusForUser(userId: number): Promise<PlatformStatus> {
   const db = getDb();
-  const [conn] = await db.select().from(whatsappConnections).where(eq(whatsappConnections.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(whatsappConnections)
+    .where(eq(whatsappConnections.userId, userId));
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.phoneNumber,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
   return {
     configured: isWhatsAppConfigured(),
-    connected: Boolean(conn),
-    identifier: conn?.phoneNumber,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
+    connected: connections.length > 0,
+    identifier: connections[0]?.identifier,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connections,
   };
 }
 
 async function getXStatusForUser(userId: number): Promise<PlatformStatus> {
   const db = getDb();
-  const [conn] = await db.select().from(xConnections).where(eq(xConnections.userId, userId)).limit(1);
+  const rows = await db.select().from(xConnections).where(eq(xConnections.userId, userId));
+  const connections: ConnectionRow[] = rows.map((r: (typeof rows)[number]) => ({
+    id: r.id,
+    identifier: r.userName,
+    lastSyncedAt: r.lastSyncedAt?.toISOString(),
+    connectedAt: r.connectedAt?.toISOString(),
+  }));
   return {
     configured: isXConfigured(),
-    connected: Boolean(conn),
-    identifier: conn?.userName,
-    lastSyncedAt: conn?.lastSyncedAt?.toISOString(),
+    connected: connections.length > 0,
+    identifier: connections[0]?.identifier,
+    lastSyncedAt: connections[0]?.lastSyncedAt,
+    connections,
   };
 }
 
@@ -91,37 +143,72 @@ export async function getAllPlatformStatuses() {
   return { slack, discord, telegram, whatsapp, x };
 }
 
-export async function disconnectSlackAction() {
+export async function disconnectSlackAction(connectionId?: number) {
   const user = await requireUser();
-  await getDb().delete(slackConnections).where(eq(slackConnections.userId, user.id));
+  const db = getDb();
+  if (connectionId != null) {
+    await db
+      .delete(slackConnections)
+      .where(and(eq(slackConnections.userId, user.id), eq(slackConnections.id, connectionId)));
+  } else {
+    await db.delete(slackConnections).where(eq(slackConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
 
-export async function disconnectDiscordAction() {
+export async function disconnectDiscordAction(connectionId?: number) {
   const user = await requireUser();
-  await getDb().delete(discordConnections).where(eq(discordConnections.userId, user.id));
+  const db = getDb();
+  if (connectionId != null) {
+    await db
+      .delete(discordConnections)
+      .where(and(eq(discordConnections.userId, user.id), eq(discordConnections.id, connectionId)));
+  } else {
+    await db.delete(discordConnections).where(eq(discordConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
 
-export async function disconnectTelegramAction() {
+export async function disconnectTelegramAction(connectionId?: number) {
   const user = await requireUser();
-  await getDb().delete(telegramConnections).where(eq(telegramConnections.userId, user.id));
+  const db = getDb();
+  if (connectionId != null) {
+    await db
+      .delete(telegramConnections)
+      .where(and(eq(telegramConnections.userId, user.id), eq(telegramConnections.id, connectionId)));
+  } else {
+    await db.delete(telegramConnections).where(eq(telegramConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
 
-export async function disconnectWhatsAppAction() {
+export async function disconnectWhatsAppAction(connectionId?: number) {
   const user = await requireUser();
-  await getDb().delete(whatsappConnections).where(eq(whatsappConnections.userId, user.id));
+  const db = getDb();
+  if (connectionId != null) {
+    await db
+      .delete(whatsappConnections)
+      .where(and(eq(whatsappConnections.userId, user.id), eq(whatsappConnections.id, connectionId)));
+  } else {
+    await db.delete(whatsappConnections).where(eq(whatsappConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
 
-export async function disconnectXAction() {
+export async function disconnectXAction(connectionId?: number) {
   const user = await requireUser();
-  await getDb().delete(xConnections).where(eq(xConnections.userId, user.id));
+  const db = getDb();
+  if (connectionId != null) {
+    await db
+      .delete(xConnections)
+      .where(and(eq(xConnections.userId, user.id), eq(xConnections.id, connectionId)));
+  } else {
+    await db.delete(xConnections).where(eq(xConnections.userId, user.id));
+  }
   revalidatePath('/settings');
   return { success: true };
 }
@@ -150,7 +237,7 @@ export async function syncTelegramAction() {
   if (result.error) return { error: result.error };
   revalidatePath('/inbox');
   revalidatePath('/settings');
-  return { success: true, imported: result.imported };
+  return { success: true, imported: result.imported, info: result.info };
 }
 
 export async function syncWhatsAppAction() {
@@ -171,7 +258,13 @@ export async function syncXAction() {
   return { success: true, imported: result.imported };
 }
 
-export async function startTelegramLinkAction(): Promise<{ success?: boolean; error?: string; linkCode?: string; botUsername?: string; webhookError?: string }> {
+export async function startTelegramLinkAction(): Promise<{
+  success?: boolean;
+  error?: string;
+  linkCode?: string;
+  botUsername?: string;
+  webhookError?: string;
+}> {
   try {
     const user = await requireUser();
     if (!isTelegramConfigured()) return { error: 'Telegram bot is not configured on the server.' };
@@ -205,7 +298,6 @@ export async function connectWhatsAppAction(
     }
 
     const digits = phoneNumber?.trim() ? normalizeWhatsAppPhone(phoneNumber.trim()) : '';
-    // Store a contact key for multi-user matching; single-tenant webhooks always route to this user.
     const phone =
       digits.length >= 10
         ? `+${digits}`
@@ -214,11 +306,13 @@ export async function connectWhatsAppAction(
           : `wa:${process.env.WHATSAPP_PHONE_NUMBER_ID}`;
 
     const db = getDb();
-    const existing = await db.select().from(whatsappConnections).where(eq(whatsappConnections.userId, user.id)).limit(1);
+    const existing = await db
+      .select()
+      .from(whatsappConnections)
+      .where(and(eq(whatsappConnections.userId, user.id), eq(whatsappConnections.phoneNumber, phone)))
+      .limit(1);
 
-    if (existing.length > 0) {
-      await db.update(whatsappConnections).set({ phoneNumber: phone }).where(eq(whatsappConnections.userId, user.id));
-    } else {
+    if (existing.length === 0) {
       await db.insert(whatsappConnections).values({ userId: user.id, phoneNumber: phone });
     }
 

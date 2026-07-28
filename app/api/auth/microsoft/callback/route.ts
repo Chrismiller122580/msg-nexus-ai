@@ -4,7 +4,7 @@ import { getDb, outlookConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
 import { exchangeMicrosoftCode, getMicrosoftProfile } from '@/lib/microsoft';
 import { ensureOutlookConnectedAccount, syncOutlookForUser } from '@/lib/microsoft-sync';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -44,34 +44,34 @@ export async function GET(request: Request) {
     const profile = await getMicrosoftProfile(tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();
+    const email = profile.email;
 
     const existing = await db
       .select()
       .from(outlookConnections)
-      .where(eq(outlookConnections.userId, user.id))
+      .where(and(eq(outlookConnections.userId, user.id), eq(outlookConnections.email, email)))
       .limit(1);
 
     if (existing.length > 0) {
       await db
         .update(outlookConnections)
         .set({
-          email: profile.email,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? existing[0].refreshToken,
           expiresAt,
         })
-        .where(eq(outlookConnections.userId, user.id));
+        .where(eq(outlookConnections.id, existing[0].id));
     } else {
       await db.insert(outlookConnections).values({
         userId: user.id,
-        email: profile.email,
+        email,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt,
       });
     }
 
-    await ensureOutlookConnectedAccount(user.id, profile.email);
+    await ensureOutlookConnectedAccount(user.id, email);
     const sync = await syncOutlookForUser(user.id);
     success = true;
     imported = sync.imported ?? 0;

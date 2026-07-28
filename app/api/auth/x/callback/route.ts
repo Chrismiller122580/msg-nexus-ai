@@ -4,7 +4,7 @@ import { getDb, xConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
 import { exchangeXCode, getXProfile } from '@/lib/x-api';
 import { syncXForUser } from '@/lib/x-sync';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -32,7 +32,12 @@ export async function GET(request: Request) {
     const db = getDb();
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
-    const existing = await db.select().from(xConnections).where(eq(xConnections.userId, user.id)).limit(1);
+    const existing = await db
+      .select()
+      .from(xConnections)
+      .where(and(eq(xConnections.userId, user.id), eq(xConnections.xUserId, profile.id)))
+      .limit(1);
+
     const values = {
       xUserId: profile.id,
       userName: profile.name,
@@ -42,7 +47,7 @@ export async function GET(request: Request) {
     };
 
     if (existing.length > 0) {
-      await db.update(xConnections).set(values).where(eq(xConnections.userId, user.id));
+      await db.update(xConnections).set(values).where(eq(xConnections.id, existing[0].id));
     } else {
       await db.insert(xConnections).values({ userId: user.id, ...values });
     }

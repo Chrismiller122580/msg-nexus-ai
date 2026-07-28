@@ -4,7 +4,7 @@ import { getDb, slackConnections } from '@/db';
 import { getCurrentUser } from '@/lib/session';
 import { exchangeSlackCode, getSlackUser } from '@/lib/slack';
 import { syncSlackForUser } from '@/lib/slack-sync';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
@@ -29,8 +29,16 @@ export async function GET(request: Request) {
     const userName = await getSlackUser(data.access_token!);
     const db = getDb();
     const expiresAt = data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null;
+    const teamId = data.team?.id || null;
 
-    const existing = await db.select().from(slackConnections).where(eq(slackConnections.userId, user.id)).limit(1);
+    const existing = teamId
+      ? await db
+          .select()
+          .from(slackConnections)
+          .where(and(eq(slackConnections.userId, user.id), eq(slackConnections.teamId, teamId)))
+          .limit(1)
+      : [];
+
     const values = {
       teamId: data.team?.id,
       teamName: data.team?.name,
@@ -41,7 +49,7 @@ export async function GET(request: Request) {
     };
 
     if (existing.length > 0) {
-      await db.update(slackConnections).set(values).where(eq(slackConnections.userId, user.id));
+      await db.update(slackConnections).set(values).where(eq(slackConnections.id, existing[0].id));
     } else {
       await db.insert(slackConnections).values({ userId: user.id, ...values });
     }

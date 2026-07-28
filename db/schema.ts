@@ -137,39 +137,49 @@ export const magicLinks = pgTable('magic_links', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+/** Multiple Gmail accounts per user (unique on userId + email). */
 export const gmailConnections = pgTable('gmail_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
   accessToken: text('access_token').notNull(),
   refreshToken: text('refresh_token'),
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserEmail: uniqueIndex('gmail_connections_user_email_unique').on(table.userId, table.email),
+}));
 
+/** Multiple Outlook accounts per user (unique on userId + email). */
 export const outlookConnections = pgTable('outlook_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   email: text('email').notNull(),
   accessToken: text('access_token').notNull(),
   refreshToken: text('refresh_token'),
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserEmail: uniqueIndex('outlook_connections_user_email_unique').on(table.userId, table.email),
+}));
 
+/** Multiple SMS lines per user (unique on userId + phone). */
 export const twilioConnections = pgTable('twilio_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumber: text('phone_number').notNull(),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserPhone: uniqueIndex('twilio_connections_user_phone_unique').on(table.userId, table.phoneNumber),
+}));
 
+/** Multiple Slack workspaces per user (unique on userId + teamId). */
 export const slackConnections = pgTable('slack_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   teamId: text('team_id'),
   teamName: text('team_name'),
   userName: text('user_name').notNull(),
@@ -178,11 +188,14 @@ export const slackConnections = pgTable('slack_connections', {
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserTeam: uniqueIndex('slack_connections_user_team_unique').on(table.userId, table.teamId),
+}));
 
+/** Multiple Discord accounts per user (unique on userId + discordUserId). */
 export const discordConnections = pgTable('discord_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   discordUserId: text('discord_user_id').notNull(),
   userName: text('user_name').notNull(),
   accessToken: text('access_token').notNull(),
@@ -190,29 +203,38 @@ export const discordConnections = pgTable('discord_connections', {
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserDiscord: uniqueIndex('discord_connections_user_discord_unique').on(table.userId, table.discordUserId),
+}));
 
+/** Multiple Telegram chats per user (unique on userId + chatId when linked). */
 export const telegramConnections = pgTable('telegram_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   chatId: text('chat_id'),
   userName: text('user_name'),
   linkCode: text('link_code'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueLinkCode: uniqueIndex('telegram_connections_link_code_unique').on(table.linkCode),
+}));
 
+/** Multiple WhatsApp numbers per user (unique on userId + phone). */
 export const whatsappConnections = pgTable('whatsapp_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   phoneNumber: text('phone_number').notNull(),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserPhone: uniqueIndex('whatsapp_connections_user_phone_unique').on(table.userId, table.phoneNumber),
+}));
 
+/** Multiple X accounts per user (unique on userId + xUserId). */
 export const xConnections = pgTable('x_connections', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   xUserId: text('x_user_id').notNull(),
   userName: text('user_name').notNull(),
   accessToken: text('access_token').notNull(),
@@ -220,7 +242,9 @@ export const xConnections = pgTable('x_connections', {
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  uniqueUserX: uniqueIndex('x_connections_user_x_unique').on(table.userId, table.xUserId),
+}));
 
 export const comments = pgTable('comments', {
   id: serial('id').primaryKey(),
