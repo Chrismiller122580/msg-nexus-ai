@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, RefreshCw, Download, Trash2, X, Play, BarChart3,
   Inbox, Calendar, DollarSign, Users, Filter, LogOut, Settings, Mail, Loader2, Shield,
-  ChevronDown,
+  ChevronDown, TrendingUp, ShoppingBag, Receipt, Repeat, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -14,12 +14,12 @@ import { Message, Insight, PlatformId, Category, RankedMessage } from '../../lib
 import { PLATFORMS, getPlatform } from '../../lib/platforms';
 import { getMessageBadge } from '../../lib/message-display';
 import { parseMessage } from '../../lib/ai-parser';
-import { searchMessages, getTopInsights } from '../../lib/semantic-search';
-import { buildSubscriptionCancelList, getCancelGuide } from '../../lib/subscription-cancel';
+import { searchMessages } from '../../lib/semantic-search';
+import { getCancelGuide } from '../../lib/subscription-cancel';
+import { buildPulseAnalytics } from '../../lib/pulse-analytics';
 import {
   formatRelativeTime,
   formatCurrency,
-  formatMoneyTotals,
   intervalSuffix,
   cn,
   downloadJson,
@@ -240,39 +240,10 @@ export default function InboxClient() {
     setSmsReplyText('');
   }, [selectedMessageId]);
 
-  const aggregates = useMemo(() => {
-    const { subs, bills, shopping } = getTopInsights(filteredMessages, insights);
-    const totalParsed = Object.keys(insights).length;
-    const upcomingBills = bills
-      .filter((b) => b.insight.amount != null)
-      .sort((a, b) => (a.insight.amount || 0) - (b.insight.amount || 0));
-    const cancelList = buildSubscriptionCancelList(subs);
-
-    // Deduped monthly spend (respects currency + annual→monthly conversion)
-    const monthlyRecurringLabel = formatMoneyTotals(
-      cancelList.map((c) => ({
-        monthly: c.monthlyAmount,
-        currency: c.currency,
-      }))
-    );
-    const totalUpcomingLabel = formatMoneyTotals(
-      upcomingBills.map((b) => ({
-        amount: b.insight.amount,
-        currency: b.insight.currency,
-      }))
-    );
-
-    return {
-      subs,
-      cancelList,
-      bills: upcomingBills,
-      shopping,
-      monthlyRecurringLabel,
-      totalParsed,
-      totalUpcomingLabel,
-      totalMessages: filteredMessages.length,
-    };
-  }, [filteredMessages, insights]);
+  const pulse = useMemo(
+    () => buildPulseAnalytics(filteredMessages, insights),
+    [filteredMessages, insights]
+  );
 
   const unparsedCount = filteredMessages.length - Object.keys(insights).filter(id => 
     filteredMessages.some(m => m.id === id)
@@ -918,7 +889,6 @@ export default function InboxClient() {
                                 {insight.amount != null && (
                                   <div className="insight-chip font-medium">
                                     {formatCurrency(insight.amount, insight.currency)}
-                                    {insight.isRecurring && <span className="text-[10px] ml-0.5 text-emerald-500">/mo</span>}
                                   </div>
                                 )}
                               </div>
@@ -949,87 +919,307 @@ export default function InboxClient() {
             </>
           ) : (
             <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Primary KPIs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 <div className="pulse-card">
-                  <div className="flex items-center gap-2 text-emerald-500 text-sm"><DollarSign size={16} /> MONTHLY RECURRING</div>
+                  <div className="flex items-center gap-2 text-emerald-500 text-xs font-medium uppercase tracking-wide">
+                    <Repeat size={14} /> Monthly burn
+                  </div>
                   <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
-                    {aggregates.monthlyRecurringLabel}
+                    {pulse.monthlyRecurringLabel}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    from {aggregates.cancelList.length} active subscription
-                    {aggregates.cancelList.length === 1 ? '' : 's'}
-                    {aggregates.cancelList.some((c) => c.billingInterval === 'year')
-                      ? ' · annual plans ÷ 12'
-                      : ''}
+                    {pulse.activeSubCount} active sub{pulse.activeSubCount === 1 ? '' : 's'}
+                    {pulse.subscriptions.some((c) => c.billingInterval === 'year') ? ' · annual ÷ 12' : ''}
                   </div>
                 </div>
                 <div className="pulse-card">
-                  <div className="flex items-center gap-2 text-amber-500 text-sm"><Calendar size={16} /> UPCOMING BILLS</div>
+                  <div className="flex items-center gap-2 text-violet-500 text-xs font-medium uppercase tracking-wide">
+                    <TrendingUp size={14} /> Est. annual
+                  </div>
                   <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
-                    {aggregates.totalUpcomingLabel}
+                    {pulse.annualRunRateLabel}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">{aggregates.bills.length} bills detected</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    avg {pulse.avgSubscriptionLabel}/mo per sub
+                  </div>
                 </div>
                 <div className="pulse-card">
-                  <div className="flex items-center gap-2 text-sky-500 text-sm"><BarChart3 size={16} /> PARSED MESSAGES</div>
-                  <div className="text-3xl sm:text-4xl font-semibold tabular-nums tracking-tighter mt-2">{aggregates.totalParsed} / {aggregates.totalMessages}</div>
+                  <div className="flex items-center gap-2 text-sky-500 text-xs font-medium uppercase tracking-wide">
+                    <DollarSign size={14} /> Total detected
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
+                    {pulse.totalDetectedLabel}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {pulse.withAmountCount} charge{pulse.withAmountCount === 1 ? '' : 's'} in inbox
+                  </div>
+                </div>
+                <div className="pulse-card">
+                  <div className="flex items-center gap-2 text-amber-500 text-xs font-medium uppercase tracking-wide">
+                    <Calendar size={14} /> Upcoming bills
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-semibold tabular-nums tracking-tighter mt-2 break-words">
+                    {pulse.upcomingBillsLabel}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {pulse.billCount} bill{pulse.billCount === 1 ? '' : 's'} detected
+                  </div>
                 </div>
               </div>
 
-              <div className="pulse-card">
-                <div className="font-semibold mb-1">Active Subscriptions</div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Detected from your inbox (one row per vendor). Amounts show charge currency and period.
-                </p>
-                {aggregates.cancelList.length === 0 && (
-                  <div className="text-sm text-muted-foreground">
-                    None detected yet. Connect email/SMS and run Analyze so we can find recurring charges.
+              {/* Time windows */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="pulse-card">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">This month</div>
+                  <div className="text-xl font-semibold tabular-nums mt-1 break-words">{pulse.spentThisMonthLabel}</div>
+                </div>
+                <div className="pulse-card">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Last 30 days</div>
+                  <div className="text-xl font-semibold tabular-nums mt-1 break-words">{pulse.spentLast30DaysLabel}</div>
+                </div>
+                <div className="pulse-card">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Parsed coverage</div>
+                  <div className="text-xl font-semibold tabular-nums mt-1">
+                    {pulse.parsedCount}
+                    <span className="text-muted-foreground font-normal text-base"> / {pulse.messageCount}</span>
                   </div>
-                )}
-                <div className="space-y-4">
-                  {aggregates.cancelList.map((item) => {
-                    const period = intervalSuffix(item.billingInterval);
+                  {pulse.unparsedCount > 0 && (
+                    <div className="text-[11px] text-amber-600 mt-1">{pulse.unparsedCount} still need analysis</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Category breakdown */}
+              <div className="pulse-card space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">Spend by category</div>
+                  <div className="text-[11px] text-muted-foreground">Primary: {pulse.primaryCurrency}</div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {pulse.categoryBreakdown.map((c) => {
+                    const Icon =
+                      c.category === 'subscription' ? Repeat : c.category === 'bill' ? Receipt : ShoppingBag;
+                    const color =
+                      c.category === 'subscription'
+                        ? 'bg-emerald-500'
+                        : c.category === 'bill'
+                          ? 'bg-amber-500'
+                          : 'bg-sky-500';
                     return (
-                      <div key={`${item.vendor}-${item.messageId}`} className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => { setView('inbox'); selectMessage(item.messageId); }}
-                          className="w-full text-sm p-3 rounded-xl hover:bg-muted cursor-pointer flex justify-between gap-2 min-h-[44px] items-center text-left border border-border/60"
-                        >
-                          <span className="truncate font-medium min-w-0">
-                            {item.vendor}
-                            {item.currency && item.currency !== 'USD' ? (
-                              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground uppercase">
-                                {item.currency}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="text-emerald-500 tabular-nums shrink-0 text-right">
-                            {item.amount != null ? (
-                              <>
-                                {formatCurrency(item.amount, item.currency)}
-                                {period ? (
-                                  <span className="text-muted-foreground font-normal">{period}</span>
-                                ) : null}
-                                {item.billingInterval === 'year' && item.monthlyAmount != null ? (
-                                  <span className="block text-[10px] text-muted-foreground font-normal">
-                                    ≈ {formatCurrency(item.monthlyAmount, item.currency)}/mo
-                                  </span>
-                                ) : null}
-                              </>
-                            ) : (
-                              '—'
-                            )}
-                          </span>
-                        </button>
-                        <SubscriptionCancelHelp guide={item.guide} compact />
+                      <div key={c.category} className="rounded-xl border border-border/60 p-3 space-y-2">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Icon size={14} className="text-muted-foreground" />
+                          {c.label}
+                          <span className="text-xs text-muted-foreground font-normal">({c.count})</span>
+                        </div>
+                        <div className="text-lg font-semibold tabular-nums break-words">{c.totalLabel}</div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${Math.max(c.sharePct, c.count ? 4 : 0)}%` }} />
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{c.sharePct}% of {pulse.primaryCurrency} total</div>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              <button onClick={runParseAllUnparsed} className="btn btn-primary w-full min-h-[44px]">Re-analyze everything</button>
+              {/* Active subscriptions */}
+              <div className="pulse-card">
+                <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+                  <div>
+                    <div className="font-semibold">Active Subscriptions</div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      One row per vendor · charged amount + monthly equivalent
+                    </p>
+                  </div>
+                  {pulse.largestSubscription?.monthlyAmount != null && (
+                    <div className="text-xs text-muted-foreground rounded-lg border border-border px-2 py-1">
+                      Largest:{' '}
+                      <span className="font-medium text-foreground">{pulse.largestSubscription.vendor}</span>
+                      {' · '}
+                      {formatCurrency(pulse.largestSubscription.monthlyAmount, pulse.largestSubscription.currency)}/mo
+                    </div>
+                  )}
+                </div>
+                {pulse.subscriptions.length === 0 ? (
+                  <div className="text-sm text-muted-foreground mt-3">
+                    None detected yet. Connect email/SMS and run Analyze so we can find recurring charges.
+                  </div>
+                ) : (
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                          <th className="py-2 pr-2 font-medium">Vendor</th>
+                          <th className="py-2 pr-2 font-medium text-right">Charged</th>
+                          <th className="py-2 pr-2 font-medium text-right">Monthly</th>
+                          <th className="py-2 font-medium text-right hidden sm:table-cell">Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pulse.subscriptions.map((item) => {
+                          const period = intervalSuffix(item.billingInterval) || (item.amount != null ? '' : '');
+                          const monthlyShare =
+                            item.monthlyAmount != null &&
+                            pulse.subscriptions.reduce((a, s) => a + (s.monthlyAmount || 0), 0) > 0
+                              ? Math.round(
+                                  (item.monthlyAmount /
+                                    pulse.subscriptions.reduce((a, s) => a + (s.monthlyAmount || 0), 0)) *
+                                    100
+                                )
+                              : 0;
+                          return (
+                            <tr key={`${item.vendor}-${item.messageId}`} className="border-b border-border/50 last:border-0">
+                              <td className="py-2.5 pr-2 align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => { setView('inbox'); selectMessage(item.messageId); }}
+                                  className="text-left font-medium hover:underline min-h-[36px]"
+                                >
+                                  {item.vendor}
+                                </button>
+                                <div className="mt-1">
+                                  <SubscriptionCancelHelp guide={item.guide} compact />
+                                </div>
+                              </td>
+                              <td className="py-2.5 pr-2 text-right tabular-nums align-top whitespace-nowrap">
+                                {item.amount != null ? (
+                                  <>
+                                    {formatCurrency(item.amount, item.currency)}
+                                    {period ? (
+                                      <span className="text-muted-foreground text-xs">{period}</span>
+                                    ) : null}
+                                  </>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                              <td className="py-2.5 pr-2 text-right tabular-nums align-top text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap">
+                                {item.monthlyAmount != null
+                                  ? `${formatCurrency(item.monthlyAmount, item.currency)}/mo`
+                                  : '—'}
+                              </td>
+                              <td className="py-2.5 text-right align-top hidden sm:table-cell">
+                                <div className="inline-flex flex-col items-end gap-1 min-w-[4.5rem]">
+                                  <span className="text-xs text-muted-foreground tabular-nums">{monthlyShare}%</span>
+                                  <div className="h-1 w-16 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-500"
+                                      style={{ width: `${Math.max(monthlyShare, item.monthlyAmount ? 4 : 0)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t border-border">
+                          <td className="pt-3 font-medium text-muted-foreground">Total monthly</td>
+                          <td />
+                          <td className="pt-3 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            {pulse.monthlyRecurringLabel}
+                          </td>
+                          <td className="hidden sm:table-cell" />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Top vendors + recent charges */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="pulse-card">
+                  <div className="font-semibold mb-1">Top vendors</div>
+                  <p className="text-xs text-muted-foreground mb-3">Ranked by monthly-equivalent spend</p>
+                  {pulse.topVendors.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No amounts detected yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {pulse.topVendors.map((v) => (
+                        <li key={`${v.category}-${v.vendor}`}>
+                          <button
+                            type="button"
+                            onClick={() => { setView('inbox'); selectMessage(v.messageId); }}
+                            className="w-full flex items-center justify-between gap-2 text-sm p-2 rounded-xl hover:bg-muted min-h-[40px] text-left"
+                          >
+                            <span className="min-w-0 truncate">
+                              <span className="font-medium">{v.vendor}</span>
+                              <span className="ml-1.5 text-[10px] uppercase text-muted-foreground">{v.category}</span>
+                            </span>
+                            <span className="tabular-nums shrink-0 text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(v.monthlyAmount || v.lastAmount, v.currency)}
+                              {v.category === 'subscription' ? (
+                                <span className="text-muted-foreground text-xs">/mo</span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="pulse-card">
+                  <div className="font-semibold mb-1">Recent charges</div>
+                  <p className="text-xs text-muted-foreground mb-3">Latest amounts found in messages</p>
+                  {pulse.recentCharges.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No charges parsed yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {pulse.recentCharges.map((c) => (
+                        <li key={c.messageId}>
+                          <button
+                            type="button"
+                            onClick={() => { setView('inbox'); selectMessage(c.messageId); }}
+                            className="w-full flex items-center justify-between gap-2 text-sm p-2 rounded-xl hover:bg-muted min-h-[40px] text-left"
+                          >
+                            <span className="min-w-0">
+                              <span className="font-medium truncate block">{c.vendor}</span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {formatRelativeTime(c.timestamp)} · {c.category}
+                              </span>
+                            </span>
+                            <span className="tabular-nums shrink-0 font-medium">
+                              {formatCurrency(c.amount, c.currency)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {pulse.largestSubscription && pulse.activeSubCount > 0 && (
+                <div className="pulse-card flex flex-col sm:flex-row sm:items-center gap-3 border-emerald-500/20 bg-emerald-500/5">
+                  <Sparkles className="text-emerald-500 shrink-0" size={20} />
+                  <div className="text-sm min-w-0">
+                    <div className="font-medium">Savings tip</div>
+                    <div className="text-muted-foreground">
+                      Canceling <span className="text-foreground font-medium">{pulse.largestSubscription.vendor}</span>
+                      {pulse.largestSubscription.monthlyAmount != null && (
+                        <>
+                          {' '}
+                          could free about{' '}
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold tabular-nums">
+                            {formatCurrency(pulse.largestSubscription.monthlyAmount, pulse.largestSubscription.currency)}/mo
+                          </span>
+                          {' '}
+                          ({formatCurrency((pulse.largestSubscription.monthlyAmount || 0) * 12, pulse.largestSubscription.currency)}/yr).
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={runParseAllUnparsed} className="btn btn-primary w-full min-h-[44px]">
+                Re-analyze everything
+              </button>
             </div>
           )}
         </div>
