@@ -21,6 +21,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${base}/login?error=${code}`);
   }
 
-  const destination = result.onboarded ? '/inbox' : '/onboarding';
+  const destination = result.onboarded ? '/dashboard' : '/onboarding';
   return NextResponse.redirect(`${base}${destination}`);
 }

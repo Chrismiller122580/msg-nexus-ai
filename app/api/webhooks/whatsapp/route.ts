@@ -55,12 +55,26 @@ export async function POST(request: Request) {
           continue;
         }
 
+        const from = msg.from.startsWith('+') ? msg.from : `+${msg.from}`;
         const n = await ingestWhatsAppWebhookMessage(userId, {
           id: msg.id,
-          from: msg.from.startsWith('+') ? msg.from : `+${msg.from}`,
+          from,
           body: text,
           timestamp: new Date(Number(msg.timestamp) * 1000).toISOString(),
         });
+        if (n > 0) {
+          try {
+            const { notifyNewMessage } = await import('@/lib/push');
+            await notifyNewMessage(userId, {
+              platform: 'WhatsApp',
+              from,
+              preview: text,
+              messageId: `whatsapp-${msg.id}`,
+            });
+          } catch (err) {
+            console.warn('[whatsapp-webhook] push notify failed', err);
+          }
+        }
         ingested += n;
       }
     }

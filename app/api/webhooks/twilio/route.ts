@@ -54,6 +54,17 @@ export async function POST(request: Request) {
       direction: 'in',
       status: 'received',
     });
+    try {
+      const { notifyNewMessage } = await import('@/lib/push');
+      await notifyNewMessage(conn.userId, {
+        platform: 'SMS',
+        from,
+        preview: body || '(empty SMS)',
+        messageId: `twilio-${conn.id}-${messageSid}`,
+      });
+    } catch (err) {
+      console.warn('[twilio-webhook] push notify failed', err);
+    }
     ingested = true;
     break;
   }

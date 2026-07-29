@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft, Mail, RefreshCw, Unplug, Loader2, Smartphone,
-  Hash, MessageCircle, Send, AtSign, Shield, CreditCard,
+  Hash, MessageCircle, Send, AtSign, Shield, CreditCard, Bell,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
@@ -25,6 +25,12 @@ import {
   syncWhatsAppAction, syncXAction,
   startTelegramLinkAction, connectWhatsAppAction,
 } from '@/app/actions/platforms';
+import {
+  getPushStatus,
+  subscribePushAction,
+  unsubscribePushAction,
+  sendTestPushAction,
+} from '@/app/actions/push';
 
 type ConnectionItem = {
   id: number;
@@ -67,6 +73,10 @@ export default function SettingsClient() {
   const [telegram, setTelegram] = useState<Status>({ configured: false, connected: false, connections: [] });
   const [whatsapp, setWhatsapp] = useState<Status>({ configured: false, connected: false, connections: [] });
   const [xPlatform, setXPlatform] = useState<Status>({ configured: false, connected: false, connections: [] });
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushPublicKey, setPushPublicKey] = useState<string | null>(null);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   async function reload() {
     const [g, o, t, p] = await Promise.all([getGmailStatus(), getOutlookStatus(), getTwilioStatus(), getAllPlatformStatuses()]);
@@ -98,6 +108,14 @@ export default function SettingsClient() {
     setWhatsapp(p.whatsapp);
     setXPlatform(p.x);
     if (p.telegram.linkCode) setTelegramCode(p.telegram.linkCode);
+    try {
+      const push = await getPushStatus();
+      setPushConfigured(push.configured);
+      setPushPublicKey(push.publicKey);
+      setPushSubscribed(push.subscribed);
+    } catch {
+      /* optional */
+    }
   }
 
   useEffect(() => {
@@ -185,7 +203,7 @@ export default function SettingsClient() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
       <header className="border-b border-border px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between max-w-3xl mx-auto w-full safe-area-top">
-        <MsgNexusLogo href="/inbox" />
+        <MsgNexusLogo href="/dashboard" />
         <div className="flex items-center gap-1 sm:gap-2">
           {isStaff && (
             <Link href="/admin" className="btn btn-ghost text-xs flex items-center gap-1.5 text-accent min-h-[44px] min-w-[44px] px-2 sm:px-4">
@@ -198,8 +216,8 @@ export default function SettingsClient() {
       </header>
 
       <div className="max-w-3xl mx-auto px-3 sm:px-6 py-6 sm:py-10">
-        <Link href="/inbox" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 sm:mb-8 min-h-[44px]">
-          <ArrowLeft size={16} /> Back to inbox
+        <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 sm:mb-8 min-h-[44px]">
+          <ArrowLeft size={16} /> Back to dashboard
         </Link>
 
         {searchParams.get('welcome') === '1' && (
@@ -210,6 +228,114 @@ export default function SettingsClient() {
             </p>
           </div>
         )}
+
+        <div id="notifications" className="card p-4 sm:p-6 space-y-3 mb-6 sm:mb-8 scroll-mt-20">
+          <div className="flex items-center gap-2">
+            <Bell className="text-indigo-500" size={18} />
+            <h2 className="font-semibold">Push notifications</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Get browser alerts when SMS, WhatsApp, or Telegram messages arrive. Works best when the app is installed as a PWA.
+          </p>
+          {!pushConfigured && (
+            <p className="text-xs text-amber-600">
+              Server needs <code className="text-[11px]">NEXT_PUBLIC_VAPID_PUBLIC_KEY</code> and{' '}
+              <code className="text-[11px]">VAPID_PRIVATE_KEY</code>.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {!pushSubscribed ? (
+              <button
+                type="button"
+                disabled={!pushConfigured || pushBusy}
+                className="btn btn-primary text-sm disabled:opacity-50"
+                onClick={async () => {
+                  setPushBusy(true);
+                  try {
+                    if (!pushPublicKey) {
+                      toast.error('VAPID public key missing');
+                      return;
+                    }
+                    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+                      toast.error('This browser does not support web push');
+                      return;
+                    }
+                    const perm = await Notification.requestPermission();
+                    if (perm !== 'granted') {
+                      toast.error('Notification permission denied');
+                      return;
+                    }
+                    const reg = await navigator.serviceWorker.ready;
+                    const sub = await reg.pushManager.subscribe({
+                      userVisibleOnly: true,
+                      applicationServerKey: urlBase64ToUint8Array(pushPublicKey),
+                    });
+                    const json = sub.toJSON();
+                    const r = await subscribePushAction({
+                      endpoint: json.endpoint!,
+                      keys: { p256dh: json.keys!.p256dh!, auth: json.keys!.auth! },
+                      userAgent: navigator.userAgent,
+                    });
+                    if (r.error) toast.error(r.error);
+                    else {
+                      toast.success('Push enabled on this device');
+                      setPushSubscribed(true);
+                    }
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Failed to enable push');
+                  } finally {
+                    setPushBusy(false);
+                  }
+                }}
+              >
+                {pushBusy ? 'Enabling…' : 'Enable push'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={pushBusy}
+                  className="btn btn-secondary text-sm"
+                  onClick={async () => {
+                    setPushBusy(true);
+                    try {
+                      const r = await sendTestPushAction();
+                      if (r.error) toast.error(r.error);
+                      else toast.success('Test notification sent');
+                    } finally {
+                      setPushBusy(false);
+                    }
+                  }}
+                >
+                  Send test
+                </button>
+                <button
+                  type="button"
+                  disabled={pushBusy}
+                  className="btn btn-secondary text-sm"
+                  onClick={async () => {
+                    setPushBusy(true);
+                    try {
+                      const reg = await navigator.serviceWorker.ready;
+                      const sub = await reg.pushManager.getSubscription();
+                      if (sub) await sub.unsubscribe();
+                      const r = await unsubscribePushAction(sub?.endpoint);
+                      if (r.error) toast.error(r.error);
+                      else {
+                        toast.success('Push disabled');
+                        setPushSubscribed(false);
+                      }
+                    } finally {
+                      setPushBusy(false);
+                    }
+                  }}
+                >
+                  Disable
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div className="min-w-0">
@@ -730,6 +856,15 @@ function PhoneCard({ icon, title, hint, status, phone, setPhone, onConnect, onSy
       {extraNote && <p className="text-xs text-amber-700 dark:text-amber-400/90 leading-relaxed">{extraNote}</p>}
     </div>
   );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
 }
 
 function MultiConnectionPanel({

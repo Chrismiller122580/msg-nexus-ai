@@ -28,12 +28,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  await ingestTelegramWebhookMessage(chatId, {
+  const imported = await ingestTelegramWebhookMessage(chatId, {
     messageId: message.message_id,
     from,
     body: text || '(empty message)',
     timestamp: new Date(message.date * 1000).toISOString(),
   });
+
+  if (imported > 0) {
+    try {
+      const { getDb, telegramConnections } = await import('@/db');
+      const { eq } = await import('drizzle-orm');
+      const db = getDb();
+      const [conn] = await db
+        .select()
+        .from(telegramConnections)
+        .where(eq(telegramConnections.chatId, chatId))
+        .limit(1);
+      if (conn) {
+        const { notifyNewMessage } = await import('@/lib/push');
+        await notifyNewMessage(conn.userId, {
+          platform: 'Telegram',
+          from,
+          preview: text || '(empty message)',
+          messageId: `telegram-${conn.id}-${message.message_id}`,
+        });
+      }
+    } catch (err) {
+      console.warn('[telegram-webhook] push notify failed', err);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

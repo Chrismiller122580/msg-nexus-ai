@@ -96,7 +96,7 @@ export function AdminShell({
   const sidebarFooter = (
     <div className="p-3 border-t border-border space-y-0.5">
       <Link
-        href="/inbox"
+        href="/dashboard"
         onClick={() => setMobileOpen(false)}
         className="flex items-center gap-3 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground rounded-xl min-h-[44px]"
       >

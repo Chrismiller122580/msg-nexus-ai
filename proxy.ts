@@ -16,7 +16,9 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
+    pathname.startsWith('/dashboard') ||
     pathname.startsWith('/inbox') ||
+    pathname.startsWith('/compose') ||
     pathname.startsWith('/onboarding') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/admin')
@@ -33,5 +35,12 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/inbox/:path*', '/onboarding/:path*', '/settings/:path*', '/admin/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/inbox/:path*',
+    '/compose/:path*',
+    '/onboarding/:path*',
+    '/settings/:path*',
+    '/admin/:path*',
+  ],
 };

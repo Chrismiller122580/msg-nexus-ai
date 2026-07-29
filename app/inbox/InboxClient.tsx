@@ -139,6 +139,9 @@ export default function InboxClient() {
       toast.success('Gmail connected — your emails are syncing in');
       router.replace('/inbox');
     }
+    if (searchParams.get('view') === 'pulse') setView('pulse');
+    const q = searchParams.get('q');
+    if (q) setSearchQuery(q);
   }, [searchParams, router]);
 
   useEffect(() => {
@@ -150,6 +153,10 @@ export default function InboxClient() {
         const data = await getUserMessages();
         setMessages(data.messages);
         setInsights(data.insights);
+        const mid = searchParams.get('messageId');
+        if (mid && data.messages.some((m: Message) => m.id === mid)) {
+          setSelectedMessageId(mid);
+        }
       } catch (e) {
         console.error('Failed to load from DB', e);
         toast.error('Failed to load messages', {
@@ -161,7 +168,7 @@ export default function InboxClient() {
     }
 
     load();
-  }, [authState]);
+  }, [authState, searchParams]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -585,7 +592,7 @@ export default function InboxClient() {
       <header className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-50 safe-area-top">
         <div className="max-w-[1400px] mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <MsgNexusLogo href="/inbox" />
+            <MsgNexusLogo href="/dashboard" />
           </div>
 
           <div className="flex items-center gap-0.5 sm:gap-1 text-sm shrink-0">

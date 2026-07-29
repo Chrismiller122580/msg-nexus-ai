@@ -267,6 +267,18 @@ export const insights = pgTable('insights', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+/** Browser Web Push subscriptions (PWA / HTTPS). */
+export const pushSubscriptions = pgTable('push_subscriptions', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  lastUsedAt: timestamp('last_used_at'),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type ConnectedAccount = typeof connectedAccounts.$inferSelect;

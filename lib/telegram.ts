@@ -60,6 +60,35 @@ export async function linkTelegramChat(linkCode: string, chatId: string, userNam
   return true;
 }
 
+export async function sendTelegramMessage(
+  chatId: string,
+  text: string
+): Promise<{ ok: true; messageId: number } | { ok: false; error: string }> {
+  const token = getTelegramBotToken();
+  if (!token) return { ok: false, error: 'Telegram bot is not configured.' };
+  const body = text.trim();
+  if (!body) return { ok: false, error: 'Message cannot be empty.' };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: body }),
+    });
+    const data = (await res.json()) as {
+      ok: boolean;
+      description?: string;
+      result?: { message_id?: number };
+    };
+    if (!data.ok) {
+      return { ok: false, error: data.description || 'Telegram send failed' };
+    }
+    return { ok: true, messageId: data.result?.message_id ?? Date.now() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Telegram send failed' };
+  }
+}
+
 export async function fetchTelegramUpdatesForChat(chatId: string, limit = 25) {
   const token = getTelegramBotToken();
   if (!token) return [];
