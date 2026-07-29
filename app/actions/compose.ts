@@ -31,6 +31,21 @@ export async function getComposeOptions() {
       .where(eq(telegramConnections.userId, user.id)),
   ]);
 
+  let defaults: {
+    defaultSendPlatform?: string | null;
+    sendDefaults?: { sms?: number; whatsapp?: number; telegram?: number };
+  } = {};
+  try {
+    const { getMyProfileAction } = await import('@/app/actions/profile');
+    const profile = await getMyProfileAction();
+    defaults = {
+      defaultSendPlatform: profile.profile.defaultSendPlatform,
+      sendDefaults: profile.profile.sendDefaults || {},
+    };
+  } catch {
+    /* profile optional */
+  }
+
   return {
     sms: sms.map((r: { id: number; phoneNumber: string }) => ({
       id: r.id,
@@ -47,6 +62,7 @@ export async function getComposeOptions() {
         identifier: r.userName || r.chatId || `tg-${r.id}`,
         chatId: r.chatId!,
       })),
+    ...defaults,
   };
 }
 

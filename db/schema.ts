@@ -279,6 +279,43 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   lastUsedAt: timestamp('last_used_at'),
 });
 
+/** Public digital card + private profile preferences (1:1 with users). */
+export const userProfiles = pgTable('user_profiles', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  handle: text('handle').notNull().unique(),
+  displayName: text('display_name'),
+  headline: text('headline'),
+  bio: text('bio'),
+  avatarUrl: text('avatar_url'),
+  location: text('location'),
+  websiteUrl: text('website_url'),
+  publicEmail: text('public_email'),
+  publicPhone: text('public_phone'),
+  socials: jsonb('socials').$type<{
+    linkedin?: string;
+    x?: string;
+    instagram?: string;
+    calendar?: string;
+    custom?: Array<{ label: string; url: string }>;
+  }>().default({}),
+  theme: text('theme').notNull().default('brand'), // brand | light | dark
+  accentColor: text('accent_color'),
+  isPublic: boolean('is_public').notNull().default(true),
+  showEmail: boolean('show_email').notNull().default(false),
+  showPhone: boolean('show_phone').notNull().default(false),
+  showConnections: boolean('show_connections').notNull().default(true),
+  allowContactForm: boolean('allow_contact_form').notNull().default(true),
+  defaultSendPlatform: text('default_send_platform'), // sms | whatsapp | telegram
+  sendDefaults: jsonb('send_defaults').$type<{
+    sms?: number;
+    whatsapp?: number;
+    telegram?: number;
+  }>().default({}),
+  cardUpdatedAt: timestamp('card_updated_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type ConnectedAccount = typeof connectedAccounts.$inferSelect;

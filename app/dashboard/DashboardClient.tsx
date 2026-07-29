@@ -197,6 +197,9 @@ export function DashboardClient() {
               <Link href="/settings" className="btn btn-secondary text-sm inline-flex gap-1.5">
                 <Plug size={16} /> Connections
               </Link>
+              <Link href="/profile" className="btn btn-secondary text-sm inline-flex gap-1.5">
+                Profile card
+              </Link>
             </div>
           </div>
         </section>

@@ -10,6 +10,7 @@ import {
   LogOut,
   Shield,
   Search,
+  User,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
@@ -22,6 +23,7 @@ const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/inbox', label: 'Messages', icon: Inbox },
   { href: '/compose', label: 'Compose', icon: PenSquare },
+  { href: '/profile', label: 'Profile', icon: User },
   { href: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 
@@ -123,9 +125,9 @@ export function UserShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — primary destinations */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur safe-area-bottom">
-        <div className="grid grid-cols-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-5 max-w-lg mx-auto">
           {NAV.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -135,7 +137,7 @@ export function UserShell({ children }: { children: React.ReactNode }) {
                 isActive(href) ? 'text-indigo-500 font-medium' : 'text-muted-foreground'
               )}
             >
-              <Icon size={20} />
+              <Icon size={18} />
               {label}
             </Link>
           ))}

@@ -33,13 +33,23 @@ export function ComposeClient() {
     getComposeOptions()
       .then((o) => {
         setOptions(o);
-        const p = (searchParams.get('platform') || 'sms') as PlatformId;
-        if (p === 'sms' || p === 'whatsapp' || p === 'telegram') setPlatform(p);
+        const fromQuery = searchParams.get('platform') as PlatformId | null;
+        const preferred = (fromQuery || o.defaultSendPlatform || 'sms') as PlatformId;
+        const p =
+          preferred === 'sms' || preferred === 'whatsapp' || preferred === 'telegram'
+            ? preferred
+            : 'sms';
+        setPlatform(p);
         const preTo = searchParams.get('to');
         if (preTo) setTo(preTo);
-        if (p === 'telegram' && o.telegram[0]) setConnectionId(o.telegram[0].id);
-        if (p === 'sms' && o.sms[0]) setConnectionId(o.sms[0].id);
-        if (p === 'whatsapp' && o.whatsapp[0]) setConnectionId(o.whatsapp[0].id);
+        const def = o.sendDefaults || {};
+        if (p === 'telegram') {
+          setConnectionId(def.telegram ?? o.telegram[0]?.id);
+        } else if (p === 'sms') {
+          setConnectionId(def.sms ?? o.sms[0]?.id);
+        } else if (p === 'whatsapp') {
+          setConnectionId(def.whatsapp ?? o.whatsapp[0]?.id);
+        }
         setLoading(false);
       })
       .catch(() => router.replace('/login?redirect=/compose'));

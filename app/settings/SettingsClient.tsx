@@ -340,7 +340,12 @@ export default function SettingsClient() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mb-2">Integrations</h1>
-            <p className="text-muted-foreground text-sm sm:text-base break-words">Connect your messaging apps · {userEmail}</p>
+            <p className="text-muted-foreground text-sm sm:text-base break-words">
+              Connect apps · {userEmail} ·{' '}
+              <Link href="/profile" className="text-indigo-500 hover:underline">
+                Profile & digital card
+              </Link>
+            </p>
           </div>
           <button onClick={async () => {
             setSyncingAll(true);

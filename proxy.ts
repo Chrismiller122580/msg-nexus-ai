@@ -19,6 +19,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/inbox') ||
     pathname.startsWith('/compose') ||
+    pathname.startsWith('/profile') ||
     pathname.startsWith('/onboarding') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/admin')
@@ -39,6 +40,7 @@ export const config = {
     '/dashboard/:path*',
     '/inbox/:path*',
     '/compose/:path*',
+    '/profile/:path*',
     '/onboarding/:path*',
     '/settings/:path*',
     '/admin/:path*',
