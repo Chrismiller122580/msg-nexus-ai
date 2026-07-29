@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { Message, Insight, Category } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 import { dispatchWebhookEvent } from '@/lib/webhooks';
+import { parseMessage, PARSER_VERSION, isInsightStale } from '@/lib/ai-parser';
 
 type DbInsightRow = typeof insightsTable.$inferSelect;
 
@@ -19,6 +20,11 @@ function mapInsightRow(ins: DbInsightRow): Insight {
   const confRaw = ins.confidence;
   const confNum =
     confRaw != null && String(confRaw).trim() !== '' ? Number(confRaw) : NaN;
+  const versionRaw = (ins as { parserVersion?: number | null }).parserVersion;
+  const parserVersion =
+    versionRaw != null && Number.isFinite(Number(versionRaw))
+      ? Number(versionRaw)
+      : undefined;
 
   return {
     messageId: ins.messageId,
@@ -33,6 +39,7 @@ function mapInsightRow(ins: DbInsightRow): Insight {
     entities: Array.isArray(ins.entities)
       ? (ins.entities as Insight['entities'])
       : [],
+    parserVersion,
   };
 }
 
@@ -110,9 +117,102 @@ export async function saveInsight(insight: Insight) {
     confidence: insight.confidence?.toString(),
     summary: insight.summary,
     entities: insight.entities,
+    parserVersion: insight.parserVersion ?? PARSER_VERSION,
   });
 
   revalidatePath('/inbox');
+}
+
+export type ReanalyzeMode = 'stale' | 'all' | 'unparsed';
+
+/**
+ * Re-run the local AI parser over the user's messages.
+ * - stale: missing parserVersion or older than PARSER_VERSION
+ * - unparsed: no insight row yet
+ * - all: every message
+ */
+export async function reanalyzeUserInsights(
+  mode: ReanalyzeMode = 'stale'
+): Promise<{ updated: number; skipped: number; error?: string }> {
+  try {
+    const db = getDb();
+    const user = await requireUser();
+
+    const userMessages = await db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.userId, user.id))
+      .orderBy(desc(messagesTable.timestamp));
+
+    if (userMessages.length === 0) {
+      return { updated: 0, skipped: 0 };
+    }
+
+    const messageIds = userMessages.map((m: { id: string }) => m.id);
+    const existingRows: DbInsightRow[] =
+      messageIds.length > 0
+        ? await db
+            .select()
+            .from(insightsTable)
+            .where(inArray(insightsTable.messageId, messageIds))
+        : [];
+
+    const byMessage = new Map<string, Insight>();
+    for (const row of existingRows) {
+      byMessage.set(row.messageId, mapInsightRow(row));
+    }
+
+    let updated = 0;
+    let skipped = 0;
+
+    for (const m of userMessages as Array<{
+      id: string;
+      body: string;
+      from: string;
+      subject?: string | null;
+    }>) {
+      const existing = byMessage.get(m.id);
+      const needs =
+        mode === 'all' ||
+        (mode === 'unparsed' && !existing) ||
+        (mode === 'stale' && (!existing || isInsightStale(existing)));
+
+      if (!needs) {
+        skipped++;
+        continue;
+      }
+
+      const ins = parseMessage(m.body, m.from, m.subject || undefined);
+      ins.messageId = m.id;
+
+      await db.delete(insightsTable).where(eq(insightsTable.messageId, m.id));
+      await db.insert(insightsTable).values({
+        messageId: ins.messageId,
+        category: ins.category,
+        amount: ins.amount?.toString(),
+        currency: ins.currency,
+        vendor: ins.vendor,
+        dueDate: ins.dueDate,
+        isRecurring: ins.isRecurring,
+        confidence: ins.confidence?.toString(),
+        summary: ins.summary,
+        entities: ins.entities,
+        parserVersion: PARSER_VERSION,
+      });
+      updated++;
+    }
+
+    revalidatePath('/inbox');
+    revalidatePath('/dashboard');
+    return { updated, skipped };
+  } catch (err: unknown) {
+    console.error('reanalyzeUserInsights error:', err);
+    return {
+      updated: 0,
+      skipped: 0,
+      error: err instanceof Error ? err.message : 'Re-analyze failed',
+    };
+  }
 }
 
 export async function deleteUserMessage(messageId: string) {
@@ -203,6 +303,7 @@ export async function importUserMessages(payload: {
           confidence: insight.confidence?.toString(),
           summary: insight.summary,
           entities: insight.entities,
+          parserVersion: insight.parserVersion ?? PARSER_VERSION,
         });
       }
 

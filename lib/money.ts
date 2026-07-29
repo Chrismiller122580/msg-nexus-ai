@@ -87,11 +87,21 @@ export function intervalSuffix(interval: BillingInterval): string {
   return ''; // unknown — don't invent a period
 }
 
+const BILLING_CUE_RE =
+  /\b(charged?|billed?|billing|subscription|renew(?:ed|al)?|total|amount\s+due|due|payment|paid|invoice|receipt|price|cost|owes?|owes)\b|\/\s*(mo|yr|wk|month|year|week)\b/i;
+
+/** Soft negatives — only applied in a tight window so "Account #" does not kill a real $ charge nearby. */
+const TIGHT_NEGATIVE_RE =
+  /\b(previous\s+balance|tax|shipping|tip|gratuity|member\s+since|unsubscribe|copyright)\b/i;
+
 /**
  * Parse amount + currency from free text.
- * Prefers explicit currency symbols/codes near the number.
+ * Prefers explicit currency symbols/codes near the number and billing-context cues.
  */
-export function extractAmountAndCurrency(text: string): {
+export function extractAmountAndCurrency(
+  text: string,
+  opts?: { vendorHint?: string }
+): {
   amount?: number;
   currency: string;
 } {
@@ -101,6 +111,7 @@ export function extractAmountAndCurrency(text: string): {
     /(?:\b(USD|EUR|GBP|CAD|AUD|MXN|INR|US\$|CA\$|C\$|A\$)\b\s*)?(?:([€£¥₹$]))?\s*(\d{1,4}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:\b(USD|EUR|GBP|CAD|AUD|MXN|INR)\b)?/gi;
 
   let best: { amount: number; currency: string; score: number } | null = null;
+  const vendor = opts?.vendorHint?.toLowerCase();
 
   for (const m of text.matchAll(re)) {
     const raw = m[3]?.replace(/,/g, '');
@@ -112,8 +123,25 @@ export function extractAmountAndCurrency(text: string): {
     const preSym = m[2];
     const postCode = m[4];
     const hasCurrency = Boolean(preCode || preSym || postCode);
+    const idx = m.index ?? 0;
+    const matchEnd = idx + (m[0]?.length ?? 0);
+
     // Skip 4-digit years when no currency signal
     if (!hasCurrency && val >= 1900 && val <= 2100 && !raw.includes('.')) continue;
+
+    // Order / account IDs: "#392-8841..." or "Account #448291"
+    const prefix = text.slice(Math.max(0, idx - 14), idx);
+    if (!hasCurrency && /#\s*$/.test(prefix)) continue;
+    if (!hasCurrency && /(?:account|order|invoice|confirmation)\s*#?\s*$/i.test(prefix)) continue;
+    // Digit glued into a longer ID chain (392-8841-221)
+    if (!hasCurrency && !raw.includes('.') && /-\s*$/.test(prefix)) continue;
+    if (!hasCurrency && !raw.includes('.') && /^\s*-/.test(text.slice(matchEnd, matchEnd + 2))) continue;
+
+    // Phone fragments: +1 (555) 321-9982
+    if (!hasCurrency && !raw.includes('.')) {
+      const phoneCtx = text.slice(Math.max(0, idx - 8), matchEnd + 8);
+      if (/\+?\d|[\d\s().-]{7,}/.test(phoneCtx) && /[()+\-]/.test(phoneCtx)) continue;
+    }
 
     // Prefer ISO code over $ so "CAD $14.99" → CAD
     let currency = 'USD';
@@ -122,17 +150,38 @@ export function extractAmountAndCurrency(text: string): {
     else if (preSym) currency = normalizeCurrencyCode(preSym);
 
     let score = 1;
-    if (preCode || postCode) score += 5;
-    else if (preSym) score += 3;
-    if (raw.includes('.')) score += 2;
+    if (preCode || postCode) score += 8;
+    else if (preSym) score += 6;
+    if (raw.includes('.')) score += 3;
     if (val < 500) score += 1;
+    // Bare integers without currency are weak candidates
+    if (!hasCurrency && !raw.includes('.')) score -= 4;
+
+    // Context windows
+    const wideStart = Math.max(0, idx - 40);
+    const wideEnd = Math.min(text.length, matchEnd + 40);
+    const wide = text.slice(wideStart, wideEnd);
+    const tight = text.slice(Math.max(0, idx - 18), Math.min(text.length, matchEnd + 18));
+    const wideLower = wide.toLowerCase();
+
+    if (BILLING_CUE_RE.test(wide)) score += 6;
+    if (/\/\s*(mo|yr|wk|month|year|week)\b/i.test(tight)) score += 5;
+    if (TIGHT_NEGATIVE_RE.test(tight)) score -= 5;
+    // Tiny residual amounts (tax, previous balance $0.00)
+    if (val < 1.5 && raw.includes('.')) score -= 3;
+    if (vendor && wideLower.includes(vendor) && hasCurrency) score += 3;
+
+    // Prefer earlier primary charge over footer noise when scores tie-ish
+    const relativePos = idx / Math.max(1, text.length);
+    if (relativePos < 0.55) score += 1;
+    else if (relativePos > 0.85) score -= 1;
 
     if (!best || score > best.score) {
       best = { amount: Math.round(val * 100) / 100, currency, score };
     }
   }
 
-  if (!best) return { currency: 'USD' };
+  if (!best || best.score < 2) return { currency: 'USD' };
   return { amount: best.amount, currency: best.currency };
 }
 

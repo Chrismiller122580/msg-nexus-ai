@@ -36,6 +36,8 @@ export interface Insight {
   confidence: number; // 0-1
   summary: string;
   entities: Array<{ type: string; value: string }>;
+  /** Bumped when parse rules change; missing/old ⇒ stale, needs re-analyze */
+  parserVersion?: number;
 }
 
 export interface AppState {

@@ -264,6 +264,8 @@ export const insights = pgTable('insights', {
   confidence: numeric('confidence'),
   summary: text('summary'),
   entities: jsonb('entities'),
+  /** Matches lib/ai-parser PARSER_VERSION; null/old rows need re-analyze */
+  parserVersion: integer('parser_version'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

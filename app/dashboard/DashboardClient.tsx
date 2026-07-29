@@ -20,14 +20,14 @@ import { toast } from 'sonner';
 import { UserShell } from '@/app/components/UserShell';
 import { LoadingSpinner } from '@/app/components/LoadingSpinner';
 import { getCurrentUserAction } from '@/app/actions/user';
-import { getUserMessages, saveInsight } from '@/app/actions/messages';
+import { getUserMessages, reanalyzeUserInsights } from '@/app/actions/messages';
 import { getConnectedAccounts } from '@/app/actions/onboarding';
 import { getGmailStatus } from '@/app/actions/gmail';
 import { getOutlookStatus } from '@/app/actions/outlook';
 import { getTwilioStatus } from '@/app/actions/twilio';
 import { getAllPlatformStatuses } from '@/app/actions/platforms';
 import { syncAllIntegrationsAction } from '@/app/actions/integrations';
-import { parseMessage } from '@/lib/ai-parser';
+import { countAnalysisGaps } from '@/lib/ai-parser';
 import { buildPulseAnalytics } from '@/lib/pulse-analytics';
 import { getMessageBadge } from '@/lib/message-display';
 import { getSendCapabilities } from '@/lib/outbound';
@@ -128,15 +128,31 @@ export function DashboardClient() {
   async function handleAnalyze() {
     setAnalyzing(true);
     try {
-      let n = 0;
-      for (const m of messages) {
-        if (insights[m.id]) continue;
-        const ins = parseMessage(m.body, m.from);
-        ins.messageId = m.id;
-        await saveInsight(ins);
-        n++;
+      const gaps = countAnalysisGaps(messages, insights);
+      const mode =
+        gaps.unparsed > 0 && gaps.stale === 0
+          ? 'unparsed'
+          : gaps.stale > 0 && gaps.unparsed === 0
+            ? 'stale'
+            : gaps.unparsed > 0 || gaps.stale > 0
+              ? 'all'
+              : 'stale';
+      const result = await reanalyzeUserInsights(
+        mode === 'all' && gaps.unparsed === 0 && gaps.stale === 0 ? 'all' : mode
+      );
+      if (result.error) {
+        toast.error(result.error);
+        return;
       }
-      toast.success(n ? `Analyzed ${n} messages` : 'Everything already analyzed');
+      if (result.updated === 0) {
+        toast.info('Everything already analyzed');
+      } else {
+        toast.success(
+          gaps.stale > 0 && gaps.unparsed === 0
+            ? `Refreshed ${result.updated} outdated analyses`
+            : `Analyzed ${result.updated} messages`
+        );
+      }
       await load();
     } finally {
       setAnalyzing(false);

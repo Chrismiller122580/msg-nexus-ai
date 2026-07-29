@@ -55,6 +55,25 @@ describe('extractAmountAndCurrency', () => {
     assert.equal(r.amount, 14.99);
     assert.equal(r.currency, 'CAD');
   });
+
+  it('prefers billed charge over previous balance / tax lines', () => {
+    const r = extractAmountAndCurrency(
+      'Your Netflix Standard was billed $15.49. Previous balance $0.00. Tax $1.23.'
+    );
+    assert.equal(r.amount, 15.49);
+  });
+
+  it('ignores phone numbers and order IDs next to real charges', () => {
+    const electric = extractAmountAndCurrency(
+      '+1 (555) 321-9982 Your electric bill is ready. Amount due: $142.87. Account #448291'
+    );
+    assert.equal(electric.amount, 142.87);
+
+    const order = extractAmountAndCurrency(
+      'Amazon Order #392-8841023-221 for Wireless Headphones ($89.00) has shipped.'
+    );
+    assert.equal(order.amount, 89);
+  });
 });
 
 describe('billing interval', () => {

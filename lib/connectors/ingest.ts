@@ -62,7 +62,7 @@ export async function ingestMessages(
       subject: item.subject,
     });
 
-    const ins = parseMessage(item.body, item.from);
+    const ins = parseMessage(item.body, item.from, item.subject);
     ins.messageId = messageId;
     await saveInsight(ins);
     imported++;

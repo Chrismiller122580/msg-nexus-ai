@@ -13,8 +13,8 @@ import { ThemeToggle } from '../components/ThemeToggle';
 import { Message, Insight, PlatformId, Category, RankedMessage } from '../../lib/types';
 import { PLATFORMS, getPlatform } from '../../lib/platforms';
 import { getMessageBadge } from '../../lib/message-display';
-import { parseMessage } from '../../lib/ai-parser';
-import { searchMessages } from '../../lib/semantic-search';
+import { parseMessage, countAnalysisGaps } from '../../lib/ai-parser';
+import { buildSearchIndex, searchWithIndex } from '../../lib/semantic-search';
 import { getCancelGuide } from '../../lib/subscription-cancel';
 import { buildPulseAnalytics } from '../../lib/pulse-analytics';
 import {
@@ -26,8 +26,11 @@ import {
 } from '../../lib/utils';
 import { logoutAction } from '../actions/auth';
 import {
-  getUserMessages, saveInsight,
-  deleteUserMessage, resetUserData,
+  getUserMessages,
+  saveInsight,
+  deleteUserMessage,
+  resetUserData,
+  reanalyzeUserInsights,
 } from '../actions/messages';
 import { getConnectedAccounts } from '../actions/onboarding';
 import { getCurrentUserAction } from '../actions/user';
@@ -131,6 +134,7 @@ export default function InboxClient() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [view, setView] = useState<ViewMode>('inbox');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
 
   useEffect(() => {
@@ -213,8 +217,14 @@ export default function InboxClient() {
     return messages.filter(m => activePlatformIds.has(m.platformId));
   }, [messages, connectedAccounts]);
 
+  // Build inverted index once per message/insight set (fast recall on each keystroke)
+  const searchIndex = useMemo(
+    () => buildSearchIndex(filteredMessages, insights),
+    [filteredMessages, insights]
+  );
+
   const ranked = useMemo<RankedMessage[]>(() => {
-    let base = searchMessages(debouncedQuery, filteredMessages, insights);
+    let base = searchWithIndex(debouncedQuery, searchIndex);
 
     base = base.filter((r) => {
       const platOk = filters.platforms.has(r.message.platformId);
@@ -229,7 +239,7 @@ export default function InboxClient() {
       );
     }
     return base;
-  }, [debouncedQuery, filteredMessages, insights, filters]);
+  }, [debouncedQuery, searchIndex, filters]);
 
   const selectedMessage = useMemo(() => {
     if (!selectedMessageId) return null;
@@ -240,8 +250,8 @@ export default function InboxClient() {
 
   const askResults = useMemo(() => {
     if (!askQuery.trim()) return [];
-    return searchMessages(askQuery, filteredMessages, insights).slice(0, 8);
-  }, [askQuery, filteredMessages, insights]);
+    return searchWithIndex(askQuery, searchIndex).slice(0, 8);
+  }, [askQuery, searchIndex]);
 
   useEffect(() => {
     setSmsReplyText('');
@@ -252,9 +262,13 @@ export default function InboxClient() {
     [filteredMessages, insights]
   );
 
-  const unparsedCount = filteredMessages.length - Object.keys(insights).filter(id => 
-    filteredMessages.some(m => m.id === id)
-  ).length;
+  const analysisGaps = useMemo(
+    () => countAnalysisGaps(filteredMessages, insights),
+    [filteredMessages, insights]
+  );
+  const unparsedCount = analysisGaps.unparsed;
+  const staleCount = analysisGaps.stale;
+  const needsAnalysisCount = unparsedCount + staleCount;
 
   function togglePlatform(id: PlatformId) {
     setFilters(prev => {
@@ -290,28 +304,61 @@ export default function InboxClient() {
   async function runParse(messageId: string) {
     const msg = messages.find(m => m.id === messageId);
     if (!msg) return;
-    const ins = parseMessage(msg.body, msg.from);
+    const ins = parseMessage(msg.body, msg.from, msg.subject);
     ins.messageId = messageId;
     setInsights(prev => ({ ...prev, [messageId]: ins }));
     await saveInsight(ins); // persist to DB
     toast.success('AI analysis complete', { description: ins.summary });
   }
 
+  /** Analyze unparsed only (legacy Analyze button). */
   async function runParseAllUnparsed() {
-    const toAnalyze = filteredMessages.filter(m => !insights[m.id]);
-    if (toAnalyze.length === 0) {
+    if (unparsedCount === 0) {
+      if (staleCount > 0) {
+        await runReanalyze('stale');
+        return;
+      }
       toast.info('All messages already analyzed');
       return;
     }
-    const newInsights = { ...insights };
-    for (const m of toAnalyze) {
-      const ins = parseMessage(m.body, m.from);
-      ins.messageId = m.id;
-      newInsights[m.id] = ins;
-      await saveInsight(ins);
+    await runReanalyze('unparsed');
+  }
+
+  /** Server-side re-parse: stale, unparsed, or all messages. */
+  async function runReanalyze(mode: 'stale' | 'all' | 'unparsed' = 'stale') {
+    if (analyzing) return;
+    setAnalyzing(true);
+    try {
+      const result = await reanalyzeUserInsights(mode);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (result.updated === 0) {
+        toast.info(
+          mode === 'all'
+            ? 'Nothing to update'
+            : mode === 'unparsed'
+              ? 'No unparsed messages'
+              : 'All insights are up to date'
+        );
+        return;
+      }
+      const data = await getUserMessages();
+      setMessages(data.messages);
+      setInsights(data.insights);
+      toast.success(
+        mode === 'all'
+          ? `Re-analyzed ${result.updated} messages`
+          : mode === 'unparsed'
+            ? `Analyzed ${result.updated} messages`
+            : `Refreshed ${result.updated} outdated analyses`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setAnalyzing(false);
     }
-    setInsights(newInsights);
-    toast.success(`Analyzed ${toAnalyze.length} messages`);
   }
 
   async function deleteMessage(id: string) {
@@ -729,9 +776,23 @@ export default function InboxClient() {
           </button>
 
           <div className="flex items-center gap-1 sm:gap-2 ml-auto">
-            <button onClick={runParseAllUnparsed} className="btn btn-secondary text-sm min-h-[40px]" disabled={unparsedCount === 0}>
-              <Play size={16} />
-              <span className="hidden sm:inline">Analyze</span>
+            <button
+              onClick={() => runReanalyze(staleCount > 0 && unparsedCount === 0 ? 'stale' : unparsedCount > 0 ? 'unparsed' : 'stale')}
+              className="btn btn-secondary text-sm min-h-[40px]"
+              disabled={analyzing || needsAnalysisCount === 0}
+              title={
+                staleCount > 0
+                  ? `${staleCount} outdated · ${unparsedCount} unparsed`
+                  : 'Run AI analysis on unparsed messages'
+              }
+            >
+              {analyzing ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+              <span className="hidden sm:inline">
+                {staleCount > 0 && unparsedCount === 0 ? 'Refresh' : 'Analyze'}
+              </span>
+              {needsAnalysisCount > 0 && (
+                <span className="text-[10px] opacity-80 tabular-nums">({needsAnalysisCount})</span>
+              )}
             </button>
             <button onClick={exportData} className="btn btn-ghost min-h-[40px] min-w-[40px] px-2" title="Export your data">
               <Download size={16} />
@@ -764,6 +825,36 @@ export default function InboxClient() {
           </div>
         )}
       </div>
+
+      {staleCount > 0 && (
+        <div className="max-w-[1400px] mx-auto w-full px-3 sm:px-6 pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <div className="flex-1 min-w-0 text-sm">
+              <span className="font-medium text-amber-800 dark:text-amber-200">
+                {staleCount} analysis{staleCount === 1 ? '' : 'es'} outdated
+              </span>
+              <span className="text-muted-foreground">
+                {' '}
+                — refresh for better search ranking and subscription totals
+                {unparsedCount > 0 ? ` (${unparsedCount} still unparsed)` : ''}.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => runReanalyze(unparsedCount > 0 ? 'all' : 'stale')}
+              disabled={analyzing}
+              className="btn btn-primary text-sm min-h-[40px] shrink-0"
+            >
+              {analyzing ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <RefreshCw size={16} />
+              )}
+              Refresh analysis
+            </button>
+          </div>
+        </div>
+      )}
 
       {showAsk && (
         <div className="max-w-[1400px] mx-auto w-full px-3 sm:px-6 pb-3">
@@ -993,6 +1084,9 @@ export default function InboxClient() {
                   </div>
                   {pulse.unparsedCount > 0 && (
                     <div className="text-[11px] text-amber-600 mt-1">{pulse.unparsedCount} still need analysis</div>
+                  )}
+                  {staleCount > 0 && (
+                    <div className="text-[11px] text-amber-600 mt-1">{staleCount} outdated — refresh recommended</div>
                   )}
                 </div>
               </div>
@@ -1224,9 +1318,23 @@ export default function InboxClient() {
                 </div>
               )}
 
-              <button onClick={runParseAllUnparsed} className="btn btn-primary w-full min-h-[44px]">
-                Re-analyze everything
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => runReanalyze('stale')}
+                  disabled={analyzing || (staleCount === 0 && unparsedCount === 0)}
+                  className="btn btn-primary w-full min-h-[44px]"
+                >
+                  {analyzing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                  {staleCount > 0 ? `Refresh ${staleCount} outdated` : unparsedCount > 0 ? `Analyze ${unparsedCount} new` : 'All up to date'}
+                </button>
+                <button
+                  onClick={() => runReanalyze('all')}
+                  disabled={analyzing || filteredMessages.length === 0}
+                  className="btn btn-secondary w-full min-h-[44px]"
+                >
+                  Re-analyze everything
+                </button>
+              </div>
             </div>
           )}
         </div>
