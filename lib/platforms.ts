@@ -6,7 +6,8 @@ export const PLATFORMS: Platform[] = [
   { id: 'slack', name: 'Slack', color: '#E01E5A' },
   { id: 'sms', name: 'SMS', color: '#10B981' },
   { id: 'telegram', name: 'Telegram', color: '#229ED9' },
-  { id: 'x', name: 'X / Twitter', color: '#000000' },
+  // Near-black with slight blue so the badge stays visible on dark UI
+  { id: 'x', name: 'X / Twitter', color: '#1a1a1a' },
   { id: 'discord', name: 'Discord', color: '#5865F2' },
   { id: 'imessage', name: 'iMessage', color: '#34C759' },
 ];

@@ -9,7 +9,7 @@ const SOURCE_BADGES: Record<string, { name: string; color: string }> = {
   discord: { name: 'Discord', color: '#5865F2' },
   telegram: { name: 'Telegram', color: '#229ED9' },
   whatsapp: { name: 'WhatsApp', color: '#25D366' },
-  x: { name: 'X', color: '#000000' },
+  x: { name: 'X', color: '#1a1a1a' },
 };
 
 /** Resolve inbox badge from ingest id prefix (e.g. gmail-abc) or platformId fallback */

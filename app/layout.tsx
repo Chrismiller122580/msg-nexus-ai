@@ -28,6 +28,7 @@ export const metadata: Metadata = {
       { url: "/icon", type: "image/png", sizes: "32x32" },
       { url: "/icon-192", type: "image/png", sizes: "192x192" },
       { url: "/icon-512", type: "image/png", sizes: "512x512" },
+      { url: "/icon-512-maskable", type: "image/png", sizes: "512x512" },
     ],
     apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
   },
