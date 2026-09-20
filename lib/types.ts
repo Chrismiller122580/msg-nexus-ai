@@ -21,6 +21,7 @@ export interface Message {
   from: string;
   body: string;
   subject?: string;
+  threadKey?: string;
 }
 
 export type Category = 'bill' | 'subscription' | 'shopping' | 'other';
