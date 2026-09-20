@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import Script from "next/script";
 import { PushRegistrar } from "@/app/components/PushRegistrar";
+import { MobileTabBar } from "@/app/components/MobileTabBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,7 +58,6 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {/* Theme initialization script - runs before interactive to prevent FOUC and avoid React <script> warning */}
         <Script id="theme-init" strategy="beforeInteractive">
           {`(function() {
             try {
@@ -69,7 +69,6 @@ export default function RootLayout({
               } else {
                 document.documentElement.classList.remove('dark');
               }
-              // Store system choice explicitly if no stored value (for toggle to know)
               if (!stored) {
                 document.documentElement.setAttribute('data-theme', theme);
               }
@@ -78,6 +77,7 @@ export default function RootLayout({
         </Script>
 
         {children}
+        <MobileTabBar />
         <PushRegistrar />
         <Toaster position="top-center" richColors closeButton />
       </body>
