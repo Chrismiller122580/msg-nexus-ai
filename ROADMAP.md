@@ -14,13 +14,16 @@
 - **Shipped:** OAuth token refresh with reconnect errors; incremental sync via lastSyncedAt (Gmail/Outlook/Slack/Discord)
 - **Shipped:** Gmail historyId cursors (history.list + 404 full-resync fallback)
 - **Shipped:** Cross-platform content fingerprint + thread keys on ingest
-- **In progress:** Webhook automation, harder sync limits, inbox thread grouping UI
+- **Shipped:** Inbox thread grouping UI + backfill of older rows
+- **In progress:** Webhook automation, harder sync limits
 - **Remaining:** iMessage (Mac relay), Teams, Signal, additional platforms from [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
+- Telegram / Discord OAuth polish parked until needed
 
 ## Phase 3: Polished app + intelligence (Started)
 - **Started:** Ask MsgNexus semantic Q&A panel in inbox
 - **Started:** PWA manifest for mobile install
 - **Shipped:** Mobile UI for user inbox/settings and admin drawer nav
+- **Shipped:** Global Sync in the app shell
 - Optional real LLM calls (xAI / Ollama) to improve parser + summaries
 - Full RAG chat over messages
 - Reminders, calendar export, rules engine

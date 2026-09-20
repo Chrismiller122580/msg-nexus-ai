@@ -11,12 +11,16 @@ import {
   Shield,
   Search,
   User,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { MsgNexusLogo } from '@/app/components/MsgNexusLogo';
 import { ThemeToggle } from '@/app/components/ThemeToggle';
 import { getCurrentUserAction } from '@/app/actions/user';
 import { logoutAction } from '@/app/actions/auth';
+import { syncAllIntegrationsAction } from '@/app/actions/integrations';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -33,6 +37,7 @@ export function UserShell({ children }: { children: React.ReactNode }) {
   const [email, setEmail] = useState('');
   const [isStaff, setIsStaff] = useState(false);
   const [q, setQ] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     getCurrentUserAction().then((u) => {
@@ -48,6 +53,19 @@ export function UserShell({ children }: { children: React.ReactNode }) {
   function isActive(href: string) {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname === href || pathname?.startsWith(href + '/');
+  }
+
+  async function handleSync() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const r = await syncAllIntegrationsAction();
+      if (r.error) toast.error(r.error);
+      else toast.success(`Synced — ${r.totalImported ?? 0} new`);
+      router.refresh();
+    } finally {
+      setSyncing(false);
+    }
   }
 
   return (
@@ -99,6 +117,16 @@ export function UserShell({ children }: { children: React.ReactNode }) {
           </form>
 
           <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-auto sm:ml-0">
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing}
+              className="btn btn-ghost text-xs min-h-[36px] px-2"
+              title="Sync all connected apps"
+            >
+              {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              <span className="hidden lg:inline">Sync</span>
+            </button>
             <ThemeToggle />
             {isStaff && (
               <Link href="/admin" className="btn btn-ghost text-xs min-h-[36px] px-2 hidden sm:inline-flex" title="Admin">
@@ -125,7 +153,6 @@ export function UserShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {/* Mobile bottom nav — primary destinations */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur safe-area-bottom">
         <div className="grid grid-cols-5 max-w-lg mx-auto">
           {NAV.map(({ href, label, icon: Icon }) => (

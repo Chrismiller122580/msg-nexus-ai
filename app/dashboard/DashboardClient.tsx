@@ -21,6 +21,7 @@ import { UserShell } from '@/app/components/UserShell';
 import { LoadingSpinner } from '@/app/components/LoadingSpinner';
 import { getCurrentUserAction } from '@/app/actions/user';
 import { getUserMessages, reanalyzeUserInsights } from '@/app/actions/messages';
+import { backfillMessageThreadsAction } from '@/app/actions/enhance';
 import { getConnectedAccounts } from '@/app/actions/onboarding';
 import { getGmailStatus } from '@/app/actions/gmail';
 import { getOutlookStatus } from '@/app/actions/outlook';
@@ -57,7 +58,7 @@ export function DashboardClient() {
     }
     setName(user.name || user.email.split('@')[0]);
 
-    const [msgs, cas, g, o, t, p] = await Promise.all([
+    const [firstMsgs, cas, g, o, t, p] = await Promise.all([
       getUserMessages(),
       getConnectedAccounts(),
       getGmailStatus(),
@@ -65,6 +66,13 @@ export function DashboardClient() {
       getTwilioStatus(),
       getAllPlatformStatuses(),
     ]);
+
+    let msgs = firstMsgs;
+    if (firstMsgs.messages.some((m) => !m.threadKey)) {
+      await backfillMessageThreadsAction();
+      msgs = await getUserMessages();
+    }
+
     setMessages(msgs.messages);
     setInsights(msgs.insights);
     setAccounts(cas as Array<{ id: number; platformId: PlatformId; identifier: string }>);
@@ -80,21 +88,13 @@ export function DashboardClient() {
       summary.push({ platform: 'SMS', count: t.connections.length, canSend: true });
     if (p.slack.connections?.length)
       summary.push({ platform: 'Slack', count: p.slack.connections.length, canSend: false });
-    if (p.discord.connections?.length)
-      summary.push({ platform: 'Discord', count: p.discord.connections.length, canSend: false });
-    if (p.telegram.connections?.length)
-      summary.push({ platform: 'Telegram', count: p.telegram.connections.length, canSend: true });
     if (p.whatsapp.connections?.length)
       summary.push({ platform: 'WhatsApp', count: p.whatsapp.connections.length, canSend: true });
     if (p.x.connections?.length)
       summary.push({ platform: 'X', count: p.x.connections.length, canSend: false });
-    // ensure canSend flags from caps when platform present
     for (const row of summary) {
-      const cap = caps.find((c) => c.label === row.platform || c.platform === row.platform.toLowerCase());
       if (row.platform === 'SMS') row.canSend = caps.find((c) => c.platform === 'sms')?.canSend ?? false;
       if (row.platform === 'WhatsApp') row.canSend = caps.find((c) => c.platform === 'whatsapp')?.canSend ?? false;
-      if (row.platform === 'Telegram') row.canSend = caps.find((c) => c.platform === 'telegram')?.canSend ?? false;
-      void cap;
     }
     setConnectionSummary(summary);
     setLoading(false);
@@ -173,7 +173,6 @@ export function DashboardClient() {
   return (
     <UserShell>
       <div className="space-y-6">
-        {/* Hero */}
         <section className="rounded-2xl border border-border bg-gradient-to-br from-indigo-500/10 via-violet-500/5 to-transparent p-5 sm:p-7">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
             <div>
@@ -186,7 +185,7 @@ export function DashboardClient() {
                 where your channels support it.
               </p>
               <div className="flex flex-wrap gap-2 mt-4">
-                {['Unified inbox', 'AI bills & subs', 'Cancel guides', 'Push alerts'].map((t) => (
+                {['Unified inbox', 'Threaded mail', 'AI bills & subs', 'Incremental Gmail'].map((t) => (
                   <span
                     key={t}
                     className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-border bg-background/80"
@@ -220,7 +219,6 @@ export function DashboardClient() {
           </div>
         </section>
 
-        {/* KPIs */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Kpi
             icon={<DollarSign size={14} className="text-emerald-500" />}
@@ -249,7 +247,6 @@ export function DashboardClient() {
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Connections */}
           <section className="lg:col-span-1 card p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Connected services</h2>
@@ -279,10 +276,7 @@ export function DashboardClient() {
                       </div>
                     </div>
                     <div className="flex gap-1">
-                      <Link
-                        href={`/inbox`}
-                        className="btn btn-secondary text-[11px] px-2 py-1 min-h-0"
-                      >
+                      <Link href={`/inbox`} className="btn btn-secondary text-[11px] px-2 py-1 min-h-0">
                         View
                       </Link>
                       {c.canSend && (
@@ -300,7 +294,6 @@ export function DashboardClient() {
             )}
           </section>
 
-          {/* Recent + attention */}
           <section className="lg:col-span-2 space-y-4">
             <div className="card p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between">
@@ -311,7 +304,7 @@ export function DashboardClient() {
               </div>
               {recent.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No messages yet. Connect apps and sync, or seed demo data from Settings.
+                  No messages yet. Connect apps and tap Sync in the header.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
@@ -362,12 +355,7 @@ export function DashboardClient() {
                 {pulse.unparsedCount > 0 && (
                   <li className="flex flex-wrap items-center justify-between gap-2">
                     <span>{pulse.unparsedCount} messages not analyzed</span>
-                    <button
-                      type="button"
-                      onClick={handleAnalyze}
-                      disabled={analyzing}
-                      className="btn btn-secondary text-xs"
-                    >
+                    <button type="button" onClick={handleAnalyze} disabled={analyzing} className="btn btn-secondary text-xs">
                       {analyzing ? 'Analyzing…' : 'Analyze now'}
                     </button>
                   </li>
@@ -375,42 +363,32 @@ export function DashboardClient() {
                 {pulse.largestSubscription?.monthlyAmount != null && (
                   <li className="text-muted-foreground">
                     Largest sub:{' '}
-                    <span className="text-foreground font-medium">
-                      {pulse.largestSubscription.vendor}
-                    </span>{' '}
-                    ·{' '}
-                    {formatCurrency(
-                      pulse.largestSubscription.monthlyAmount,
-                      pulse.largestSubscription.currency
-                    )}
+                    <span className="text-foreground font-medium">{pulse.largestSubscription.vendor}</span>
+                    {' '}·{' '}
+                    {formatCurrency(pulse.largestSubscription.monthlyAmount, pulse.largestSubscription.currency)}
                     /mo — review on{' '}
-                    <Link href="/inbox?view=pulse" className="text-indigo-500 hover:underline">
-                      Pulse
-                    </Link>
+                    <Link href="/inbox?view=pulse" className="text-indigo-500 hover:underline">Pulse</Link>
                   </li>
                 )}
                 <li className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-muted-foreground inline-flex items-center gap-1.5">
                     <Bell size={14} /> Enable browser push for new messages
                   </span>
-                  <Link href="/settings#notifications" className="btn btn-secondary text-xs">
-                    Notifications
-                  </Link>
+                  <Link href="/settings#notifications" className="btn btn-secondary text-xs">Notifications</Link>
                 </li>
                 {pulse.unparsedCount === 0 && !pulse.largestSubscription && (
-                  <li className="text-muted-foreground">You&apos;re caught up — nice work.</li>
+                  <li className="text-muted-foreground">You're caught up — nice work.</li>
                 )}
               </ul>
             </div>
           </section>
         </div>
 
-        {/* Quick compose teaser */}
         <section className="card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-semibold">Send a message</h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              SMS, WhatsApp, and Telegram when connected. Email send coming with expanded OAuth scopes.
+              SMS and WhatsApp when connected. Email send needs extra Gmail scopes later.
             </p>
           </div>
           <Link href="/compose" className="btn btn-primary text-sm inline-flex gap-1.5 shrink-0">
