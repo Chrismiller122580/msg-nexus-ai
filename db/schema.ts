@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, jsonb, boolean, numeric, integer, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, jsonb, boolean, numeric, integer, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -95,23 +95,28 @@ export const connectedAccounts = pgTable('connected_accounts', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   platformId: text('platform_id').notNull(),
-  identifier: text('identifier').notNull(), // e.g. "john@gmail.com", "+15551234567", "work-account"
-  label: text('label'), // optional friendly name
+  identifier: text('identifier').notNull(),
+  label: text('label'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueUserPlatformIdentifier: uniqueIndex('unique_user_platform_identifier').on(table.userId, table.platformId, table.identifier),
 }));
 
 export const messages = pgTable('messages', {
-  id: text('id').primaryKey(), // we keep the generated client ids for now
+  id: text('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   platformId: text('platform_id').notNull(),
   timestamp: text('timestamp').notNull(),
   from: text('from').notNull(),
   body: text('body').notNull(),
   subject: text('subject'),
+  fingerprint: text('fingerprint'),
+  threadKey: text('thread_key'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  userFingerprint: uniqueIndex('messages_user_fingerprint_unique').on(table.userId, table.fingerprint),
+  userThread: index('messages_user_thread_idx').on(table.userId, table.threadKey),
+}));
 
 export const smsMessages = pgTable('sms_messages', {
   id: text('id').primaryKey(),
@@ -119,7 +124,7 @@ export const smsMessages = pgTable('sms_messages', {
   from: text('from').notNull(),
   to: text('to'),
   body: text('body').notNull(),
-  direction: text('direction').notNull().default('in'), // in | out
+  direction: text('direction').notNull().default('in'),
   status: text('status').notNull().default('received'),
   messageSid: text('message_sid'),
   timestamp: timestamp('timestamp').defaultNow().notNull(),
@@ -137,7 +142,6 @@ export const magicLinks = pgTable('magic_links', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-/** Multiple Gmail accounts per user (unique on userId + email). */
 export const gmailConnections = pgTable('gmail_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -146,14 +150,12 @@ export const gmailConnections = pgTable('gmail_connections', {
   refreshToken: text('refresh_token'),
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
-  /** Gmail users.history startHistoryId cursor for incremental sync. */
   historyId: text('history_id'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueUserEmail: uniqueIndex('gmail_connections_user_email_unique').on(table.userId, table.email),
 }));
 
-/** Multiple Outlook accounts per user (unique on userId + email). */
 export const outlookConnections = pgTable('outlook_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -167,7 +169,6 @@ export const outlookConnections = pgTable('outlook_connections', {
   uniqueUserEmail: uniqueIndex('outlook_connections_user_email_unique').on(table.userId, table.email),
 }));
 
-/** Multiple SMS lines per user (unique on userId + phone). */
 export const twilioConnections = pgTable('twilio_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -178,7 +179,6 @@ export const twilioConnections = pgTable('twilio_connections', {
   uniqueUserPhone: uniqueIndex('twilio_connections_user_phone_unique').on(table.userId, table.phoneNumber),
 }));
 
-/** Multiple Slack workspaces per user (unique on userId + teamId). */
 export const slackConnections = pgTable('slack_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -194,7 +194,6 @@ export const slackConnections = pgTable('slack_connections', {
   uniqueUserTeam: uniqueIndex('slack_connections_user_team_unique').on(table.userId, table.teamId),
 }));
 
-/** Multiple Discord accounts per user (unique on userId + discordUserId). */
 export const discordConnections = pgTable('discord_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -209,7 +208,6 @@ export const discordConnections = pgTable('discord_connections', {
   uniqueUserDiscord: uniqueIndex('discord_connections_user_discord_unique').on(table.userId, table.discordUserId),
 }));
 
-/** Multiple Telegram chats per user (unique on userId + chatId when linked). */
 export const telegramConnections = pgTable('telegram_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -222,7 +220,6 @@ export const telegramConnections = pgTable('telegram_connections', {
   uniqueLinkCode: uniqueIndex('telegram_connections_link_code_unique').on(table.linkCode),
 }));
 
-/** Multiple WhatsApp numbers per user (unique on userId + phone). */
 export const whatsappConnections = pgTable('whatsapp_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -233,7 +230,6 @@ export const whatsappConnections = pgTable('whatsapp_connections', {
   uniqueUserPhone: uniqueIndex('whatsapp_connections_user_phone_unique').on(table.userId, table.phoneNumber),
 }));
 
-/** Multiple X accounts per user (unique on userId + xUserId). */
 export const xConnections = pgTable('x_connections', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -266,12 +262,10 @@ export const insights = pgTable('insights', {
   confidence: numeric('confidence'),
   summary: text('summary'),
   entities: jsonb('entities'),
-  /** Matches lib/ai-parser PARSER_VERSION; null/old rows need re-analyze */
   parserVersion: integer('parser_version'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-/** Browser Web Push subscriptions (PWA / HTTPS). */
 export const pushSubscriptions = pgTable('push_subscriptions', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -283,7 +277,6 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   lastUsedAt: timestamp('last_used_at'),
 });
 
-/** Public digital card + private profile preferences (1:1 with users). */
 export const userProfiles = pgTable('user_profiles', {
   userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   handle: text('handle').notNull().unique(),
@@ -302,14 +295,14 @@ export const userProfiles = pgTable('user_profiles', {
     calendar?: string;
     custom?: Array<{ label: string; url: string }>;
   }>().default({}),
-  theme: text('theme').notNull().default('brand'), // brand | light | dark
+  theme: text('theme').notNull().default('brand'),
   accentColor: text('accent_color'),
   isPublic: boolean('is_public').notNull().default(true),
   showEmail: boolean('show_email').notNull().default(false),
   showPhone: boolean('show_phone').notNull().default(false),
   showConnections: boolean('show_connections').notNull().default(true),
   allowContactForm: boolean('allow_contact_form').notNull().default(true),
-  defaultSendPlatform: text('default_send_platform'), // sms | whatsapp | telegram
+  defaultSendPlatform: text('default_send_platform'),
   sendDefaults: jsonb('send_defaults').$type<{
     sms?: number;
     whatsapp?: number;
