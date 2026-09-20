@@ -4,6 +4,7 @@ import { drizzle as drizzlePg } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { getDatabaseUrl } from '@/lib/database-url';
 import * as schema from './schema';
+import * as syncSchema from './sync-schema';
 
 let _db: any = null;
 
@@ -17,20 +18,18 @@ export function getDb() {
       );
     }
 
-    // Use standard postgres-js driver for local Postgres or regular connections.
-    // Use neon-http only for explicit Neon serverless URLs (https style or .neon.tech with special hints).
     const useNeonHttp = url.includes('neon.tech') || url.startsWith('https://');
 
     if (useNeonHttp) {
       const sql = neon(url);
-      _db = drizzleNeon(sql, { schema });
+      _db = drizzleNeon(sql, { schema: { ...schema, ...syncSchema } });
     } else {
-      // Standard libpq-style URL works great with local pg (and also Neon over TCP)
       const client = postgres(url, { max: 3, idle_timeout: 20 });
-      _db = drizzlePg(client, { schema });
+      _db = drizzlePg(client, { schema: { ...schema, ...syncSchema } });
     }
   }
   return _db;
 }
 
 export * from './schema';
+export * from './sync-schema';
