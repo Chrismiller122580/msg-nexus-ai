@@ -2,6 +2,7 @@
 
 import { requireUser } from '@/lib/session';
 import { syncAllConnectors } from '@/lib/connectors/sync-all';
+import { recordSyncRun } from '@/lib/sync-health';
 import { revalidatePath } from 'next/cache';
 
 export async function syncAllIntegrationsAction(): Promise<{
@@ -13,9 +14,11 @@ export async function syncAllIntegrationsAction(): Promise<{
   try {
     const user = await requireUser();
     const result = await syncAllConnectors(user.id);
+    await recordSyncRun({ userId: user.id, source: 'manual', result });
 
     revalidatePath('/inbox');
     revalidatePath('/settings');
+    revalidatePath('/dashboard');
 
     return {
       success: true,
