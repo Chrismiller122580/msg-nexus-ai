@@ -149,27 +149,9 @@ export function UserShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8">
+      <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-8">
         {children}
       </main>
-
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur safe-area-bottom">
-        <div className="grid grid-cols-5 max-w-lg mx-auto">
-          {NAV.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-[10px]',
-                isActive(href) ? 'text-indigo-500 font-medium' : 'text-muted-foreground'
-              )}
-            >
-              <Icon size={18} />
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
     </div>
   );
 }
