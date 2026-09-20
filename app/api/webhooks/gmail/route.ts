@@ -32,7 +32,13 @@ export async function POST(request: Request) {
     ? await db.select({ userId: gmailConnections.userId }).from(gmailConnections).where(eq(gmailConnections.email, email))
     : await db.select({ userId: gmailConnections.userId }).from(gmailConnections);
 
-  const userIds = [...new Set(rows.map((r: { userId: number }) => r.userId))];
+  const userIds: number[] = [
+    ...new Set(
+      (rows as Array<{ userId: number }>)
+        .map((r) => Number(r.userId))
+        .filter((id) => Number.isFinite(id))
+    ),
+  ];
   let imported = 0;
   for (const userId of userIds) {
     const r = await syncGmailForUser(userId);
