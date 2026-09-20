@@ -1,6 +1,12 @@
 import { getDb, gmailConnections } from '@/db';
 import { eq } from 'drizzle-orm';
-import { fetchRecentGmailMessages, getValidAccessToken } from '@/lib/gmail';
+import {
+  fetchGmailHistoryUpdates,
+  fetchGmailMessagesByIds,
+  fetchRecentGmailMessages,
+  getGmailProfile,
+  getValidAccessToken,
+} from '@/lib/gmail';
 import { SYNC_BATCH_SIZE } from '@/lib/sync-constants';
 import { ensureConnectedAccount, ingestMessages } from '@/lib/connectors/ingest';
 import { syncErrorResult, type SyncResult } from '@/lib/oauth-token';
@@ -19,9 +25,9 @@ async function syncOneGmailConnection(
     return { imported: 0, error: `Gmail ${conn.email} is not connected.` };
   }
 
-  async function load(since: Date | null) {
+  async function withTokenRetry<T>(fn: (token: string) => Promise<T>): Promise<T> {
     try {
-      return await fetchRecentGmailMessages(accessToken!, limit, since);
+      return await fn(accessToken!);
     } catch (err) {
       if (err instanceof Error && /session expired|401|expired/i.test(err.message)) {
         const retried = await getValidAccessToken(userId, {
@@ -30,17 +36,52 @@ async function syncOneGmailConnection(
         });
         if (!retried) throw err;
         accessToken = retried;
-        return await fetchRecentGmailMessages(retried, limit, since);
+        return await fn(retried);
       }
       throw err;
     }
   }
 
-  let gmailMessages = await load(conn.lastSyncedAt ?? null);
+  let usedHistory = false;
   let usedFullResync = false;
-  if (gmailMessages.length === 0 && conn.lastSyncedAt) {
-    gmailMessages = await load(null);
-    usedFullResync = true;
+  let nextHistoryId: string | null = conn.historyId ?? null;
+  let gmailMessages: Awaited<ReturnType<typeof fetchRecentGmailMessages>> = [];
+
+  if (conn.historyId) {
+    const hist = await withTokenRetry((token) =>
+      fetchGmailHistoryUpdates(token, conn.historyId!, limit)
+    );
+    nextHistoryId = hist.historyId || conn.historyId;
+    if (hist.stale) {
+      usedFullResync = true;
+      gmailMessages = await withTokenRetry((token) =>
+        fetchRecentGmailMessages(token, limit, null)
+      );
+    } else {
+      usedHistory = true;
+      gmailMessages = await withTokenRetry((token) =>
+        fetchGmailMessagesByIds(token, hist.messageIds.slice(0, limit))
+      );
+    }
+  } else {
+    gmailMessages = await withTokenRetry((token) =>
+      fetchRecentGmailMessages(token, limit, conn.lastSyncedAt ?? null)
+    );
+    if (gmailMessages.length === 0 && conn.lastSyncedAt) {
+      gmailMessages = await withTokenRetry((token) =>
+        fetchRecentGmailMessages(token, limit, null)
+      );
+      usedFullResync = true;
+    }
+  }
+
+  if (!nextHistoryId || usedFullResync) {
+    try {
+      const profile = await withTokenRetry((token) => getGmailProfile(token));
+      if (profile.historyId) nextHistoryId = profile.historyId;
+    } catch {
+      /* keep previous cursor */
+    }
   }
 
   await ensureEmailConnectedAccount(userId, conn.email);
@@ -61,19 +102,28 @@ async function syncOneGmailConnection(
   const db = getDb();
   await db
     .update(gmailConnections)
-    .set({ lastSyncedAt: new Date() })
+    .set({
+      lastSyncedAt: new Date(),
+      historyId: nextHistoryId ?? conn.historyId ?? null,
+    })
     .where(eq(gmailConnections.id, conn.id));
 
   if (imported === 0 && gmailMessages.length === 0) {
     return {
       imported: 0,
-      info: `No inbox messages for ${conn.email}.`,
+      info: usedHistory
+        ? `No new inbox messages for ${conn.email}.`
+        : `No inbox messages for ${conn.email}.`,
     };
   }
 
   return {
     imported,
-    info: usedFullResync ? `Full resync for ${conn.email}.` : undefined,
+    info: usedFullResync
+      ? `Full resync for ${conn.email}.`
+      : usedHistory
+        ? `Incremental Gmail sync for ${conn.email}.`
+        : undefined,
   };
 }
 
