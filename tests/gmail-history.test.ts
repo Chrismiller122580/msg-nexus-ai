@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { collectGmailHistoryMessageIds } from '@/lib/gmail';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { collectGmailHistoryMessageIds } from '../lib/gmail-history';
 
 describe('collectGmailHistoryMessageIds', () => {
   it('dedupes messageAdded ids and keeps order', () => {
@@ -10,11 +11,11 @@ describe('collectGmailHistoryMessageIds', () => {
         { messagesAdded: [{ message: { id: 'a' } }, { message: { id: 'c' } }] },
       ],
     });
-    expect(ids).toEqual(['a', 'b', 'c']);
+    assert.deepEqual(ids, ['a', 'b', 'c']);
   });
 
   it('returns empty when history is missing', () => {
-    expect(collectGmailHistoryMessageIds({ historyId: '1' })).toEqual([]);
-    expect(collectGmailHistoryMessageIds({})).toEqual([]);
+    assert.deepEqual(collectGmailHistoryMessageIds({ historyId: '1' }), []);
+    assert.deepEqual(collectGmailHistoryMessageIds({}), []);
   });
 });

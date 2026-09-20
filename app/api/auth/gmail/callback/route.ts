@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
     const db = getDb();
     const email = profile.emailAddress;
+    const historyId = profile.historyId ?? null;
 
     // Upsert by (userId, email) so users can connect multiple Gmail accounts
     const existing = await db
@@ -51,6 +52,7 @@ export async function GET(request: Request) {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? existing[0].refreshToken,
           expiresAt,
+          historyId: historyId ?? existing[0].historyId,
         })
         .where(eq(gmailConnections.id, existing[0].id));
     } else {
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         expiresAt,
+        historyId,
       });
     }
 
