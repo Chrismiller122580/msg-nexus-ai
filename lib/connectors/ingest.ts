@@ -2,6 +2,7 @@ import { getDb, messages as messagesTable, connectedAccounts } from '@/db';
 import { eq, and } from 'drizzle-orm';
 import { parseMessage } from '@/lib/ai-parser';
 import { saveInsight } from '@/app/actions/messages';
+import { contentFingerprint, threadKey } from '@/lib/message-dedupe';
 import type { PlatformId } from '@/lib/types';
 import type { FetchedMessage } from './types';
 
@@ -44,13 +45,22 @@ export async function ingestMessages(
 
   for (const item of items) {
     const messageId = `${idPrefix}-${item.externalId}`;
-    const [existing] = await db
+    const fingerprint = contentFingerprint(item);
+    const thread = threadKey(item);
+
+    const [existingId] = await db
       .select({ id: messagesTable.id })
       .from(messagesTable)
       .where(and(eq(messagesTable.userId, userId), eq(messagesTable.id, messageId)))
       .limit(1);
+    if (existingId) continue;
 
-    if (existing) continue;
+    const [existingFp] = await db
+      .select({ id: messagesTable.id })
+      .from(messagesTable)
+      .where(and(eq(messagesTable.userId, userId), eq(messagesTable.fingerprint, fingerprint)))
+      .limit(1);
+    if (existingFp) continue;
 
     await db.insert(messagesTable).values({
       id: messageId,
@@ -60,6 +70,8 @@ export async function ingestMessages(
       from: item.from,
       body: item.body,
       subject: item.subject,
+      fingerprint,
+      threadKey: thread,
     });
 
     const ins = parseMessage(item.body, item.from, item.subject);
