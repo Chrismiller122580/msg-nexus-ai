@@ -8,6 +8,7 @@ for (const script of [
   'scripts/patch-inbox-threads.mjs',
   'scripts/patch-dashboard-health.mjs',
   'scripts/patch-travel-spend.mjs',
+  'scripts/patch-smart-filters.mjs',
 ]) {
   const patch = spawnSync(process.execPath, [join(root, script)], { stdio: 'inherit' });
   if (patch.status !== 0) process.exit(patch.status || 1);
