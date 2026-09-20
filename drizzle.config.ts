@@ -3,7 +3,6 @@ import { resolve } from 'path';
 import { defineConfig } from 'drizzle-kit';
 import { getDatabaseUrl } from './lib/database-url';
 
-// Load .env.local for drizzle-kit CLI (Next.js loads this automatically at runtime)
 const envLocal = resolve(process.cwd(), '.env.local');
 if (existsSync(envLocal)) {
   for (const line of readFileSync(envLocal, 'utf8').split('\n')) {
@@ -24,7 +23,7 @@ if (existsSync(envLocal)) {
 }
 
 export default defineConfig({
-  schema: './db/schema.ts',
+  schema: ['./db/schema.ts', './db/sync-schema.ts'],
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {

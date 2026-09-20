@@ -4,10 +4,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const patch = spawnSync(process.execPath, [join(root, 'scripts/patch-inbox-threads.mjs')], {
-  stdio: 'inherit',
-});
-if (patch.status !== 0) process.exit(patch.status || 1);
+for (const script of ['scripts/patch-inbox-threads.mjs', 'scripts/patch-dashboard-health.mjs']) {
+  const patch = spawnSync(process.execPath, [join(root, script)], { stdio: 'inherit' });
+  if (patch.status !== 0) process.exit(patch.status || 1);
+}
 
 const DB_KEYS = [
   'DATABASE_URL',
@@ -20,8 +20,6 @@ const DB_KEYS = [
 const url = DB_KEYS.map((k) => process.env[k]?.trim()).find(Boolean) || '';
 if (!url) {
   console.error('\n❌ No Postgres URL found (DATABASE_URL or POSTGRES_URL_*).');
-  console.error('   Vercel → Storage → Create Postgres (Neon) → connect to Production');
-  console.error('   Then redeploy: https://vercel.com/chrismiller122580s-projects/msgnexus-ai/deployments\n');
   process.exit(1);
 }
 const isNeon = url.includes('neon.tech');

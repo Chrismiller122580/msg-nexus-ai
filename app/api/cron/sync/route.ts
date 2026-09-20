@@ -5,12 +5,11 @@ import {
   outlookConnections,
   twilioConnections,
   slackConnections,
-  discordConnections,
-  telegramConnections,
   whatsappConnections,
   xConnections,
 } from '@/db';
 import { syncAllConnectors } from '@/lib/connectors/sync-all';
+import { recordSyncRun } from '@/lib/sync-health';
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -28,8 +27,6 @@ export async function GET(request: Request) {
     db.select({ userId: outlookConnections.userId }).from(outlookConnections),
     db.select({ userId: twilioConnections.userId }).from(twilioConnections),
     db.select({ userId: slackConnections.userId }).from(slackConnections),
-    db.select({ userId: discordConnections.userId }).from(discordConnections),
-    db.select({ userId: telegramConnections.userId }).from(telegramConnections),
     db.select({ userId: whatsappConnections.userId }).from(whatsappConnections),
     db.select({ userId: xConnections.userId }).from(xConnections),
   ]);
@@ -39,12 +36,21 @@ export async function GET(request: Request) {
   }
 
   let totalImported = 0;
-  const results: Array<{ userId: number; imported: number }> = [];
+  const results: Array<{ userId: number; imported: number; error?: string }> = [];
 
   for (const userId of userIds) {
-    const sync = await syncAllConnectors(userId);
-    totalImported += sync.totalImported;
-    results.push({ userId, imported: sync.totalImported });
+    try {
+      const sync = await syncAllConnectors(userId);
+      await recordSyncRun({ userId, source: 'cron', result: sync });
+      totalImported += sync.totalImported;
+      results.push({ userId, imported: sync.totalImported });
+    } catch (err) {
+      results.push({
+        userId,
+        imported: 0,
+        error: err instanceof Error ? err.message : 'sync failed',
+      });
+    }
   }
 
   return NextResponse.json({ ok: true, usersSynced: userIds.size, totalImported, results });
