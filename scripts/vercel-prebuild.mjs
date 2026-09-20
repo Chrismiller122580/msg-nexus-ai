@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const patch = spawnSync(process.execPath, [join(root, 'scripts/patch-inbox-threads.mjs')], {
+  stdio: 'inherit',
+});
+if (patch.status !== 0) process.exit(patch.status || 1);
+
 const DB_KEYS = [
   'DATABASE_URL',
   'POSTGRES_URL',

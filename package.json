@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/patch-inbox-threads.mjs && next dev",
+    "build": "node scripts/patch-inbox-threads.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push --force",
@@ -17,7 +17,7 @@
     "vercel:login": "npx vercel login",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "vercel-build": "node scripts/vercel-prebuild.mjs && npm run db:push && npm run build",
+    "vercel-build": "node scripts/vercel-prebuild.mjs && npm run db:push && next build",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
