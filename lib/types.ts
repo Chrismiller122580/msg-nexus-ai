@@ -11,20 +11,20 @@ export type PlatformId =
 export interface Platform {
   id: PlatformId;
   name: string;
-  color: string; // e.g. 'bg-green-500' or hex for inline
+  color: string;
 }
 
 export interface Message {
   id: string;
   platformId: PlatformId;
-  timestamp: string; // ISO string
+  timestamp: string;
   from: string;
   body: string;
   subject?: string;
   threadKey?: string;
 }
 
-export type Category = 'bill' | 'subscription' | 'shopping' | 'other';
+export type Category = 'bill' | 'subscription' | 'shopping' | 'travel' | 'other';
 
 export interface Insight {
   messageId: string;
@@ -32,18 +32,17 @@ export interface Insight {
   amount?: number;
   currency?: string;
   vendor?: string;
-  dueDate?: string; // human display or ISO-ish
+  dueDate?: string;
   isRecurring?: boolean;
-  confidence: number; // 0-1
+  confidence: number;
   summary: string;
   entities: Array<{ type: string; value: string }>;
-  /** Bumped when parse rules change; missing/old ⇒ stale, needs re-analyze */
   parserVersion?: number;
 }
 
 export interface AppState {
   messages: Message[];
-  insights: Record<string, Insight>; // key = messageId
+  insights: Record<string, Insight>;
 }
 
 export interface RankedMessage {
