@@ -13,9 +13,9 @@
 - **Shipped:** Admin portal, RBAC, Stripe billing, public API v1, UserLens UX auditor
 - **Shipped:** OAuth token refresh with reconnect errors; incremental sync via lastSyncedAt (Gmail/Outlook/Slack/Discord)
 - **Shipped:** Gmail historyId cursors (history.list + 404 full-resync fallback)
-- **In progress:** Webhook automation, harder sync limits
+- **Shipped:** Cross-platform content fingerprint + thread keys on ingest
+- **In progress:** Webhook automation, harder sync limits, inbox thread grouping UI
 - **Remaining:** iMessage (Mac relay), Teams, Signal, additional platforms from [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
-- Threading, stronger cross-platform deduplication
 
 ## Phase 3: Polished app + intelligence (Started)
 - **Started:** Ask MsgNexus semantic Q&A panel in inbox
