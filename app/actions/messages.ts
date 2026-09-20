@@ -4,7 +4,7 @@ import { getDb, messages as messagesTable, insights as insightsTable } from '@/d
 import { requireUser } from '@/lib/session';
 import { eq, inArray, desc, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { Message, Insight, Category } from '@/lib/types';
+import { Message, Insight, Category, PlatformId } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 import { dispatchWebhookEvent } from '@/lib/webhooks';
 import { parseMessage, PARSER_VERSION, isInsightStale } from '@/lib/ai-parser';
@@ -43,6 +43,18 @@ function mapInsightRow(ins: DbInsightRow): Insight {
   };
 }
 
+function mapMessageRow(m: typeof messagesTable.$inferSelect): Message {
+  return {
+    id: m.id,
+    platformId: m.platformId as PlatformId,
+    timestamp: m.timestamp,
+    from: m.from,
+    body: m.body,
+    subject: m.subject || undefined,
+    threadKey: m.threadKey || undefined,
+  };
+}
+
 export async function getUserMessages(): Promise<{ messages: Message[]; insights: Record<string, Insight> }> {
   const db = getDb();
   const user = await requireUser();
@@ -69,7 +81,7 @@ export async function getUserMessages(): Promise<{ messages: Message[]; insights
   }
 
   return {
-    messages: userMessages as unknown as Message[],
+    messages: userMessages.map(mapMessageRow),
     insights: insightsMap,
   };
 }
@@ -125,12 +137,6 @@ export async function saveInsight(insight: Insight) {
 
 export type ReanalyzeMode = 'stale' | 'all' | 'unparsed';
 
-/**
- * Re-run the local AI parser over the user's messages.
- * - stale: missing parserVersion or older than PARSER_VERSION
- * - unparsed: no insight row yet
- * - all: every message
- */
 export async function reanalyzeUserInsights(
   mode: ReanalyzeMode = 'stale'
 ): Promise<{ updated: number; skipped: number; error?: string }> {
