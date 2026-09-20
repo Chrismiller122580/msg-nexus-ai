@@ -146,6 +146,8 @@ export const gmailConnections = pgTable('gmail_connections', {
   refreshToken: text('refresh_token'),
   expiresAt: timestamp('expires_at'),
   lastSyncedAt: timestamp('last_synced_at'),
+  /** Gmail users.history startHistoryId cursor for incremental sync. */
+  historyId: text('history_id'),
   connectedAt: timestamp('connected_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueUserEmail: uniqueIndex('gmail_connections_user_email_unique').on(table.userId, table.email),

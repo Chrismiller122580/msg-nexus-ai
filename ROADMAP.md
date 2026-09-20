@@ -12,7 +12,8 @@
 - **Shipped:** Gmail, Outlook, Twilio SMS (send + webhook + sync), Slack, Discord, Telegram, WhatsApp, X
 - **Shipped:** Admin portal, RBAC, Stripe billing, public API v1, UserLens UX auditor
 - **Shipped:** OAuth token refresh with reconnect errors; incremental sync via lastSyncedAt (Gmail/Outlook/Slack/Discord)
-- **In progress:** Webhook automation, harder sync limits, Gmail historyId cursors
+- **Shipped:** Gmail historyId cursors (history.list + 404 full-resync fallback)
+- **In progress:** Webhook automation, harder sync limits
 - **Remaining:** iMessage (Mac relay), Teams, Signal, additional platforms from [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)
 - Threading, stronger cross-platform deduplication
 
